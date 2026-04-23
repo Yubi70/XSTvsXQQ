@@ -1,0 +1,5 @@
+.venv/
+src/.monitor.lock
+__pycache__/
+*.pyc
+.env

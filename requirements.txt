@@ -1,0 +1,8 @@
+pandas
+yfinance
+schedule
+winotify
+pytz
+python-dotenv
+streamlit
+plotly
