@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 LOG_PATH = Path(__file__).parent / "monitor_log.csv"
+GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
 SIGNAL_THRESHOLD = 5.0
 REFRESH_SECONDS = 30
 
@@ -37,12 +38,33 @@ def load_log() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=REFRESH_SECONDS)
+def load_last_git_sync_status() -> str:
+    if not GIT_SYNC_LOG_PATH.exists():
+        return "Last Git Sync: no sync log yet"
+
+    try:
+        last_line = ""
+        with open(GIT_SYNC_LOG_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last_line = line.strip()
+        if not last_line:
+            return "Last Git Sync: sync log is empty"
+        return f"Last Git Sync: {last_line}"
+    except Exception as e:
+        return f"Last Git Sync: could not read sync log ({e})"
+
+
 df = load_log()
+git_sync_status = load_last_git_sync_status()
 latest_raw = df.iloc[-1] if not df.empty else None
 valid_df = df[df["Signal"] != "DATA ERROR"].dropna(
     subset=["Price_XST", "Price_XQQ", "Delta_$", "Delta_%"]
 )
 latest = valid_df.iloc[-1] if not valid_df.empty else None
+
+st.caption(git_sync_status)
 
 # ── Daily tendency indicators ─────────────────────────────────────────────────
 def render_tendency(label: str, change: float, unit_suffix: str, threshold: float) -> None:
