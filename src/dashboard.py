@@ -41,7 +41,7 @@ def load_log() -> pd.DataFrame:
 @st.cache_data(ttl=REFRESH_SECONDS)
 def load_last_git_sync_status() -> str:
     if not GIT_SYNC_LOG_PATH.exists():
-        return "Last Git Sync: no sync log yet"
+        return ""
 
     try:
         last_line = ""
@@ -57,12 +57,18 @@ def load_last_git_sync_status() -> str:
 
 
 df = load_log()
-git_sync_status = load_last_git_sync_status()
 latest_raw = df.iloc[-1] if not df.empty else None
 valid_df = df[df["Signal"] != "DATA ERROR"].dropna(
     subset=["Price_XST", "Price_XQQ", "Delta_$", "Delta_%"]
 )
 latest = valid_df.iloc[-1] if not valid_df.empty else None
+git_sync_status = load_last_git_sync_status()
+if not git_sync_status:
+    if latest_raw is not None:
+        latest_ts = str(latest_raw["Timestamp"]).split(".")[0]
+        git_sync_status = f"Last Git Sync: inferred from latest data update at {latest_ts}"
+    else:
+        git_sync_status = "Last Git Sync: waiting for first data update"
 
 st.caption(git_sync_status)
 
