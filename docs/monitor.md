@@ -36,6 +36,16 @@ When a signal fires you receive:
 - **Windows popup** — stays on screen until you click OK
 - **Email alert** — sent to all configured recipients
 
+### Reverse-only mode (position-aware alerts)
+
+The monitor now tracks which ETF you currently hold and only alerts for the opposite switch:
+
+- If holding is `XST`: only `XST HIGH vs XQQ` will alert (sell XST, buy XQQ)
+- If holding is `XQQ`: only `XQQ HIGH vs XST` will alert (sell XQQ, buy XST)
+
+After an actionable alert is triggered, the holding mode auto-flips for the next cycle.
+State is stored in `src/position_state.json`.
+
 ---
 
 ## Schedule
@@ -43,8 +53,8 @@ When a signal fires you receive:
 | Time (ET) | Action |
 |---|---|
 | **9:00 AM** Mon–Fri | Script auto-starts via Windows Task Scheduler |
-| **9:30 AM** | First price check runs |
-| Every **30 min** | Price check runs |
+| **9:32 AM** | First price check runs (2-minute opening delay) |
+| Every **30 min** | Price check runs (e.g., 10:02, 10:32, 11:02...) |
 | **4:00 PM** | Market closed — checks skipped |
 | **4:30 PM** | Script shuts down automatically |
 
@@ -58,6 +68,7 @@ All settings are stored in `.env` at the project root:
 SMTP_SENDER=hubert.smtp@gmail.com       # Gmail account used to send alerts
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx       # Gmail App Password
 ALERT_RECIPIENT=email1@x.com,email2@x.com  # Alert recipients (comma-separated)
+START_HOLDING=XQQ                          # Initial holding mode if no state file exists
 ```
 
 To change the signal threshold, edit `src/monitor.py`:

@@ -5,11 +5,12 @@ calculates the delta, and appends results to a rolling log (monitor_log.csv).
 
 import os
 import csv
+import json
 import smtplib
 import schedule
 import time
 import atexit
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 import yfinance as yf
 import ctypes
@@ -27,14 +28,67 @@ TICKERS = ["XST.TO", "XQQ.TO"]
 LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_log.csv")
 LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]
 SIGNAL_THRESHOLD_PCT = 5.0  # flag when |delta %| >= this value
+STATE_PATH = os.path.join(os.path.dirname(__file__), "position_state.json")
+VALID_HOLDINGS = {"XST", "XQQ"}
+DEFAULT_HOLDING = os.getenv("START_HOLDING", "XQQ").strip().upper()
 
 
 MARKET_TZ = pytz.timezone("America/Toronto")
 MARKET_OPEN  = (9, 30)   # 9:30 AM ET
 MARKET_CLOSE = (16, 0)   # 4:00 PM ET
 MARKET_STOP  = (16, 30)  # script self-exits at 4:30 PM ET
+FIRST_CHECK_DELAY_MINUTES = 2  # delay opening validation to reduce Yahoo first-minute errors
+CHECK_MINUTE_A = (MARKET_OPEN[1] + FIRST_CHECK_DELAY_MINUTES) % 60
+CHECK_MINUTE_B = (CHECK_MINUTE_A + 30) % 60
 LOCK_PATH = os.path.join(os.path.dirname(__file__), ".monitor.lock")
 _LOCK_HANDLE = None
+
+
+def normalize_holding(holding: str | None) -> str:
+    value = (holding or "").strip().upper()
+    return value if value in VALID_HOLDINGS else "XQQ"
+
+
+def opposite_holding(holding: str) -> str:
+    return "XQQ" if holding == "XST" else "XST"
+
+
+def expected_signal_for_holding(holding: str) -> str:
+    if holding == "XST":
+        return "XST HIGH vs XQQ"  # sell XST, buy XQQ
+    return "XQQ HIGH vs XST"      # sell XQQ, buy XST
+
+
+def load_holding_state() -> str:
+    default_holding = normalize_holding(DEFAULT_HOLDING)
+    if not os.path.isfile(STATE_PATH):
+        save_holding_state(default_holding)
+        return default_holding
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        holding = normalize_holding(payload.get("holding"))
+        if holding not in VALID_HOLDINGS:
+            raise ValueError("Invalid holding in state file")
+        return holding
+    except Exception:
+        save_holding_state(default_holding)
+        return default_holding
+
+
+def save_holding_state(holding: str) -> None:
+    payload = {
+        "holding": normalize_holding(holding),
+        "updated_at": datetime.now(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
+    }
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=True, indent=2)
+
+
+def filter_actionable_signal(raw_signal: str, holding: str) -> str:
+    if raw_signal in ("", "DATA ERROR"):
+        return raw_signal
+    return raw_signal if raw_signal == expected_signal_for_holding(holding) else ""
 
 
 def acquire_single_instance_lock() -> bool:
@@ -185,18 +239,27 @@ def run_check() -> None:
     ts_et = datetime.now(MARKET_TZ)
     ts = ts_et.strftime("%Y-%m-%d %H:%M:%S %Z")
     print(f"\n[{ts}] Fetching prices...")
+    holding = load_holding_state()
+    print(f"  Current holding mode: {holding} (waiting for: {expected_signal_for_holding(holding)})")
     prices = fetch_prices()
     result = compute_delta(prices)
+    raw_signal = result["Signal"]
+    result["Signal"] = filter_actionable_signal(raw_signal, holding)
     row = {"Timestamp": ts, **result}
     write_log(row)
 
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
     print(f"  Delta  : {result['Delta_$']} CAD  ({result['Delta_%']}%)")
+    if raw_signal and raw_signal != "DATA ERROR" and not result["Signal"]:
+        print(f"  Threshold reached ({raw_signal}) but ignored because current holding is {holding}.")
     if result["Signal"]:
         print(f"  *** SIGNAL: {result['Signal']} ***")
         send_notification(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
+        new_holding = opposite_holding(holding)
+        save_holding_state(new_holding)
+        print(f"  Holding mode flipped to {new_holding}. Next expected signal: {expected_signal_for_holding(new_holding)}")
     print(f"  Logged to {LOG_PATH}")
 
 
@@ -208,10 +271,21 @@ def main() -> None:
 
     print("=== XST vs XQQ Price Monitor ===")
     print(f"Checking every 30 minutes. Log: {LOG_PATH}")
+    print(f"Scheduled checks at :{CHECK_MINUTE_A:02d} and :{CHECK_MINUTE_B:02d} each hour during market hours.")
     print("Auto-exits at 16:30 ET. Press Ctrl+C to stop manually.\n")
 
-    run_check()  # run immediately on start
-    schedule.every(30).minutes.do(run_check)
+    now = datetime.now(MARKET_TZ)
+    open_time = now.replace(hour=MARKET_OPEN[0], minute=MARKET_OPEN[1], second=0, microsecond=0)
+    first_check_time = open_time + timedelta(minutes=FIRST_CHECK_DELAY_MINUTES)
+
+    if is_market_open() and now >= first_check_time:
+        run_check()  # run immediately only if we are already past the opening delay
+    elif now.weekday() < 5 and open_time <= now < first_check_time:
+        print(f"Waiting until {first_check_time.strftime('%H:%M ET')} for first validation of the day.")
+
+    # Anchor checks to wall-clock minutes, e.g. 09:32, 10:02, 10:32...
+    schedule.every().hour.at(f":{CHECK_MINUTE_A:02d}").do(run_check)
+    schedule.every().hour.at(f":{CHECK_MINUTE_B:02d}").do(run_check)
 
     while True:
         now = datetime.now(MARKET_TZ)

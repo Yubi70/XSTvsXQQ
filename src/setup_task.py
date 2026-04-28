@@ -1,4 +1,4 @@
-"""
+r"""
 setup_task.py — Registers a Windows Task Scheduler task to auto-start
 the XST vs XQQ monitor at 9:00 AM every Mon-Fri.
 Run once as Administrator: .venv\\Scripts\\python src\\setup_task.py
