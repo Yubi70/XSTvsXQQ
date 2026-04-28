@@ -187,20 +187,54 @@ def write_log(row: dict) -> None:
 
 
 REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
+GIT_SYNC_LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_git_sync.log")
+
+
+def _append_git_sync_log(message: str) -> None:
+    ts = datetime.now(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
+    with open(GIT_SYNC_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {message}\n")
 
 
 def git_push_log() -> None:
     """Commit and push the updated monitor_log.csv to GitHub."""
     try:
-        subprocess.run(["git", "-C", REPO_ROOT, "add", "src/monitor_log.csv"],
-                       capture_output=True, check=True)
-        subprocess.run(["git", "-C", REPO_ROOT, "commit", "-m", "chore: update monitor_log.csv"],
-                       capture_output=True)  # may return non-zero if nothing changed
-        subprocess.run(["git", "-C", REPO_ROOT, "push"],
-                       capture_output=True, check=True)
+        status = subprocess.run(
+            ["git", "-C", REPO_ROOT, "status", "--porcelain", "src/monitor_log.csv"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if not status.stdout.strip():
+            _append_git_sync_log("No monitor_log.csv changes to push.")
+            return
+
+        subprocess.run(
+            ["git", "-C", REPO_ROOT, "add", "src/monitor_log.csv"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        commit = subprocess.run(
+            ["git", "-C", REPO_ROOT, "commit", "-m", "chore: update monitor_log.csv"],
+            capture_output=True,
+            text=True,
+        )
+        if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr).lower():
+            raise subprocess.CalledProcessError(commit.returncode, commit.args, commit.stdout, commit.stderr)
+
+        subprocess.run(
+            ["git", "-C", REPO_ROOT, "push", "origin", "main"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        _append_git_sync_log("Pushed monitor_log.csv to origin/main.")
         print("  monitor_log.csv pushed to GitHub.")
     except subprocess.CalledProcessError as e:
-        print(f"  [WARN] Git push failed: {e}")
+        details = (e.stderr or e.stdout or str(e)).strip()
+        _append_git_sync_log(f"Git sync failed: {details}")
+        print(f"  [WARN] Git push failed: {details}")
 
 
 def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
