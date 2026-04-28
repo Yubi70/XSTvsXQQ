@@ -7,6 +7,7 @@ import os
 import csv
 import json
 import smtplib
+import subprocess
 import schedule
 import time
 import atexit
@@ -185,6 +186,23 @@ def write_log(row: dict) -> None:
         writer.writerow(row)
 
 
+REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
+
+
+def git_push_log() -> None:
+    """Commit and push the updated monitor_log.csv to GitHub."""
+    try:
+        subprocess.run(["git", "-C", REPO_ROOT, "add", "src/monitor_log.csv"],
+                       capture_output=True, check=True)
+        subprocess.run(["git", "-C", REPO_ROOT, "commit", "-m", "chore: update monitor_log.csv"],
+                       capture_output=True)  # may return non-zero if nothing changed
+        subprocess.run(["git", "-C", REPO_ROOT, "push"],
+                       capture_output=True, check=True)
+        print("  monitor_log.csv pushed to GitHub.")
+    except subprocess.CalledProcessError as e:
+        print(f"  [WARN] Git push failed: {e}")
+
+
 def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
     if not SMTP_SENDER or not SMTP_PASSWORD or not ALERT_RECIPIENTS:
         print("  [WARN] Email not configured — skipping email alert.")
@@ -247,6 +265,7 @@ def run_check() -> None:
     result["Signal"] = filter_actionable_signal(raw_signal, holding)
     row = {"Timestamp": ts, **result}
     write_log(row)
+    threading.Thread(target=git_push_log, daemon=True).start()
 
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
