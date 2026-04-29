@@ -41,6 +41,7 @@ MARKET_STOP  = (16, 30)  # script self-exits at 4:30 PM ET
 FIRST_CHECK_DELAY_MINUTES = 2  # delay opening validation to reduce Yahoo first-minute errors
 CHECK_MINUTE_A = (MARKET_OPEN[1] + FIRST_CHECK_DELAY_MINUTES) % 60
 CHECK_MINUTE_B = (CHECK_MINUTE_A + 30) % 60
+FINAL_CLOSE_CHECK = (16, 2)  # capture one final value just after the close
 LOCK_PATH = os.path.join(os.path.dirname(__file__), ".monitor.lock")
 _LOCK_HANDLE = None
 
@@ -140,6 +141,14 @@ def is_market_open() -> bool:
         return False
     t = (now.hour, now.minute)
     return MARKET_OPEN <= t < MARKET_CLOSE
+
+
+def is_within_collection_window() -> bool:
+    now = datetime.now(MARKET_TZ)
+    if now.weekday() >= 5:
+        return False
+    t = (now.hour, now.minute)
+    return MARKET_OPEN <= t < MARKET_CLOSE or t == FINAL_CLOSE_CHECK
 
 
 
@@ -283,7 +292,7 @@ def send_notification(signal: str, xst: float, xqq: float, delta_pct: float) -> 
 
 
 def run_check() -> None:
-    if not is_market_open():
+    if not is_within_collection_window():
         now = datetime.now(MARKET_TZ)
         print(f"\n[{now.strftime('%Y-%m-%d %H:%M')} ET] Market closed — skipping check.")
         return
@@ -325,6 +334,7 @@ def main() -> None:
     print("=== XST vs XQQ Price Monitor ===")
     print(f"Checking every 30 minutes. Log: {LOG_PATH}")
     print(f"Scheduled checks at :{CHECK_MINUTE_A:02d} and :{CHECK_MINUTE_B:02d} each hour during market hours.")
+    print(f"Final close capture scheduled for {FINAL_CLOSE_CHECK[0]:02d}:{FINAL_CLOSE_CHECK[1]:02d} ET.")
     print("Auto-exits at 16:30 ET. Press Ctrl+C to stop manually.\n")
 
     now = datetime.now(MARKET_TZ)
