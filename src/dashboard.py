@@ -90,6 +90,13 @@ def parse_price_text(value: str) -> float | None:
         return None
 
 
+def parse_amount_text(value: str) -> float | None:
+    parsed = parse_price_text(value)
+    if parsed is None or parsed <= 0:
+        return None
+    return parsed
+
+
 df = load_log()
 latest_raw = df.iloc[-1] if not df.empty else None
 valid_df = df[df["Signal"] != "DATA ERROR"].dropna(
@@ -333,6 +340,7 @@ def render_since_switch_tab() -> None:
             "holding": "XST",
             "last_switch_date": "",
             "cost_basis": {"XST": None, "XQQ": None},
+            "approx_amount_cad": 10000.0,
         }
 
     state_holding = str(state.get("holding", "XST")).strip().upper()
@@ -350,6 +358,8 @@ def render_since_switch_tab() -> None:
     state_cost_basis = state.get("cost_basis") or {}
     state_xst_text = "" if state_cost_basis.get("XST") is None else f"{float(state_cost_basis.get('XST')):.4f}"
     state_xqq_text = "" if state_cost_basis.get("XQQ") is None else f"{float(state_cost_basis.get('XQQ')):.4f}"
+    state_amount = pd.to_numeric(state.get("approx_amount_cad"), errors="coerce")
+    state_amount_text = "10000" if pd.isna(state_amount) or float(state_amount) <= 0 else f"{float(state_amount):.2f}"
 
     with st.expander("Edit switch inputs", expanded=False):
         with st.form("switch_inputs_form"):
@@ -363,13 +373,17 @@ def render_since_switch_tab() -> None:
             pcol1, pcol2 = st.columns(2)
             form_xst = pcol1.text_input("XST trade price", value=state_xst_text, placeholder="e.g. 62.86")
             form_xqq = pcol2.text_input("XQQ trade price", value=state_xqq_text, placeholder="e.g. 66.14")
+            form_amount = st.text_input("Approximate amount (CAD)", value=state_amount_text, placeholder="e.g. 10000")
             submitted = st.form_submit_button("Save switch inputs", width="stretch")
 
         if submitted:
             new_xst = parse_price_text(form_xst)
             new_xqq = parse_price_text(form_xqq)
+            new_amount = parse_amount_text(form_amount)
             if new_xst is None or new_xqq is None:
                 st.error("Please enter valid numeric prices for both XST and XQQ.")
+            elif new_amount is None:
+                st.error("Please enter a valid positive approximate amount in CAD.")
             else:
                 updated_state = {
                     "holding": form_holding,
@@ -378,6 +392,7 @@ def render_since_switch_tab() -> None:
                         "XST": new_xst,
                         "XQQ": new_xqq,
                     },
+                    "approx_amount_cad": new_amount,
                     "updated_at": pd.Timestamp.now(tz="America/Toronto").strftime("%Y-%m-%d %H:%M:%S %Z"),
                 }
                 ok, msg = save_position_state(updated_state)
@@ -415,16 +430,28 @@ def render_since_switch_tab() -> None:
     switched_ret = (current_now / float(current_entry)) - 1.0
     no_switch_ret = (previous_now / float(previous_entry)) - 1.0
     edge = switched_ret - no_switch_ret
+    approx_amount = pd.to_numeric(state.get("approx_amount_cad"), errors="coerce")
+    if pd.isna(approx_amount) or float(approx_amount) <= 0:
+        approx_amount = 10000.0
 
-    c1, c2, c3 = st.columns(3)
+    switched_value_amt = float(approx_amount) * (1.0 + switched_ret)
+    no_switch_value_amt = float(approx_amount) * (1.0 + no_switch_ret)
+    edge_cad = switched_value_amt - no_switch_value_amt
+
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Switched return", f"{switched_ret * 100:+.3f}%")
     c2.metric("No-switch return", f"{no_switch_ret * 100:+.3f}%")
     c3.metric("Switch edge", f"{edge * 100:+.3f} pp")
+    c4.metric("Switch edge ($)", f"${edge_cad:+,.2f}")
 
     switched_value = (float(previous_entry) / float(current_entry)) * current_now
     no_switch_value = previous_now
     extra_cad = switched_value - no_switch_value
 
+    st.caption(
+        f"For approx ${float(approx_amount):,.2f} invested at switch time: "
+        f"switched value ${switched_value_amt:,.2f} vs no-switch ${no_switch_value_amt:,.2f} (edge {edge_cad:+,.2f} CAD). "
+    )
     st.caption(
         f"Normalized to selling 1 share of {previous_ticker} at ${float(previous_entry):.2f} on switch day: "
         f"switched path is {extra_cad:+.4f} CAD versus no-switch."
