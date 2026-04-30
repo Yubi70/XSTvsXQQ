@@ -55,7 +55,8 @@ State is stored in `src/position_state.json`.
 | **9:00 AM** Mon–Fri | Script auto-starts via Windows Task Scheduler |
 | **9:32 AM** | First price check runs (2-minute opening delay) |
 | Every **30 min** | Price check runs (e.g., 10:02, 10:32, 11:02...) |
-| **4:00 PM** | Market closed — checks skipped |
+| **4:00 PM** | Market closed — regular checks skipped |
+| **4:02 PM** | Final close capture — one last price snapshot after close |
 | **4:30 PM** | Script shuts down automatically |
 
 ---
@@ -69,12 +70,34 @@ SMTP_SENDER=hubert.smtp@gmail.com       # Gmail account used to send alerts
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx       # Gmail App Password
 ALERT_RECIPIENT=email1@x.com,email2@x.com  # Alert recipients (comma-separated)
 START_HOLDING=XQQ                          # Initial holding mode if no state file exists
+LAST_SWITCH_COST_XST=62.1500               # Optional: your most recent XST buy price
+LAST_SWITCH_COST_XQQ=59.9000               # Optional: your most recent XQQ buy price
 ```
 
 To change the signal threshold, edit `src/monitor.py`:
 ```python
 SIGNAL_THRESHOLD_PCT = 5.0  # trigger at 5% delta
 ```
+
+If cost values are provided, each check prints whether your current holding is **WINNING** or **LOSING**:
+
+```
+Position P/L (XQQ) from 59.9: +1.2300 CAD (+2.05%) -> WINNING
+```
+
+On an actionable switch, the monitor automatically updates the new holding's entry cost in `src/position_state.json` using the switch-time price.
+
+---
+
+## Git Auto-Sync
+
+After every price check the monitor automatically commits and pushes `monitor_log.csv` to the remote repository (`origin/main`).
+
+- Only runs if the file has actually changed since the last commit
+- Runs in a background thread so it never blocks the check cycle
+- All push results (success or failure) are recorded in `src/monitor_git_sync.log`
+
+If git is not configured or the push fails, the monitor continues running normally and logs a warning.
 
 ---
 
@@ -91,18 +114,25 @@ Every check is appended to `src/monitor_log.csv`:
 | `Delta_%` | Percentage difference from average price (1 decimal) |
 | `Signal` | Switch signal if threshold reached, blank otherwise |
 
+> P/L status is printed to the console each cycle and calculated from the current holding's latest price minus its saved entry cost.
+
 ---
 
 ## Files
 
 ```
 src/
-  monitor.py       — Main monitoring script
-  setup_task.py    — Registers the Windows Task Scheduler task
-  monitor_log.csv  — Rolling log of all price checks (auto-created)
-.env               — Credentials and recipients (never commit this file)
-requirements.txt   — Python dependencies
+  monitor.py            — Main monitoring script
+  setup_task.py         — Registers the Windows Task Scheduler task
+  monitor_log.csv       — Rolling log of all price checks (auto-created)
+  monitor_git_sync.log  — Log of all Git push attempts (auto-created)
+  position_state.json   — Current holding mode, persisted across restarts
+  .monitor.lock         — Single-instance lock file (auto-managed, do not delete)
+.env                    — Credentials and recipients (never commit this file)
+requirements.txt        — Python dependencies
 ```
+
+> **Single-instance lock:** The monitor creates `.monitor.lock` on startup and holds an exclusive file lock while running. If you try to start a second instance it will exit immediately with the message *"Another monitor instance is already running."* The lock is released automatically on exit.
 
 ---
 

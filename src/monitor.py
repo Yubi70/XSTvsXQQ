@@ -34,6 +34,18 @@ VALID_HOLDINGS = {"XST", "XQQ"}
 DEFAULT_HOLDING = os.getenv("START_HOLDING", "XQQ").strip().upper()
 
 
+def _parse_optional_float(raw: str | None) -> float | None:
+    try:
+        value = float((raw or "").strip())
+        return round(value, 4)
+    except (TypeError, ValueError):
+        return None
+
+
+ENV_COST_XST = _parse_optional_float(os.getenv("LAST_SWITCH_COST_XST"))
+ENV_COST_XQQ = _parse_optional_float(os.getenv("LAST_SWITCH_COST_XQQ"))
+
+
 MARKET_TZ = pytz.timezone("America/Toronto")
 MARKET_OPEN  = (9, 30)   # 9:30 AM ET
 MARKET_CLOSE = (16, 0)   # 4:00 PM ET
@@ -61,30 +73,110 @@ def expected_signal_for_holding(holding: str) -> str:
     return "XQQ HIGH vs XST"      # sell XQQ, buy XST
 
 
-def load_holding_state() -> str:
-    default_holding = normalize_holding(DEFAULT_HOLDING)
+def _default_state() -> dict:
+    return {
+        "holding": normalize_holding(DEFAULT_HOLDING),
+        "cost_basis": {
+            "XST": ENV_COST_XST,
+            "XQQ": ENV_COST_XQQ,
+        },
+    }
+
+
+def _normalize_cost_basis(raw_cost_basis: dict | None) -> dict[str, float | None]:
+    payload = raw_cost_basis or {}
+    return {
+        "XST": _parse_optional_float(str(payload.get("XST")) if payload.get("XST") is not None else None),
+        "XQQ": _parse_optional_float(str(payload.get("XQQ")) if payload.get("XQQ") is not None else None),
+    }
+
+
+def load_state() -> dict:
+    default_state = _default_state()
     if not os.path.isfile(STATE_PATH):
-        save_holding_state(default_holding)
-        return default_holding
+        save_state(default_state)
+        return default_state
     try:
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             payload = json.load(f)
-        holding = normalize_holding(payload.get("holding"))
-        if holding not in VALID_HOLDINGS:
-            raise ValueError("Invalid holding in state file")
-        return holding
+
+        state = {
+            "holding": normalize_holding(payload.get("holding")),
+            "cost_basis": _normalize_cost_basis(payload.get("cost_basis")),
+        }
+
+        # If state cost is missing, seed from .env so first run can still show P/L.
+        if state["cost_basis"]["XST"] is None and ENV_COST_XST is not None:
+            state["cost_basis"]["XST"] = ENV_COST_XST
+        if state["cost_basis"]["XQQ"] is None and ENV_COST_XQQ is not None:
+            state["cost_basis"]["XQQ"] = ENV_COST_XQQ
+
+        return state
     except Exception:
-        save_holding_state(default_holding)
-        return default_holding
+        save_state(default_state)
+        return default_state
 
 
-def save_holding_state(holding: str) -> None:
+def save_state(state: dict) -> None:
     payload = {
-        "holding": normalize_holding(holding),
+        "holding": normalize_holding(state.get("holding")),
+        "cost_basis": _normalize_cost_basis(state.get("cost_basis")),
         "updated_at": datetime.now(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=True, indent=2)
+
+
+def load_holding_state() -> str:
+    return normalize_holding(load_state().get("holding"))
+
+
+def save_holding_state(holding: str) -> None:
+    state = load_state()
+    state["holding"] = normalize_holding(holding)
+    save_state(state)
+
+
+def _price_key_for_holding(holding: str) -> str:
+    return "Price_XST" if holding == "XST" else "Price_XQQ"
+
+
+def compute_position_pnl(result: dict, holding: str, state: dict) -> dict[str, float | str | None]:
+    price_key = _price_key_for_holding(holding)
+    current_price = result.get(price_key)
+    entry_cost = (state.get("cost_basis") or {}).get(holding)
+
+    if current_price is None:
+        return {
+            "Entry_Cost": entry_cost,
+            "PnL_$": None,
+            "PnL_%": None,
+            "Status": "NO PRICE",
+        }
+    if entry_cost is None:
+        return {
+            "Entry_Cost": None,
+            "PnL_$": None,
+            "PnL_%": None,
+            "Status": "NO COST",
+        }
+
+    pnl_abs = round(current_price - entry_cost, 4)
+    pnl_pct = None if entry_cost == 0 else round((pnl_abs / entry_cost) * 100, 2)
+
+    if pnl_abs > 0:
+        status = "WINNING"
+    elif pnl_abs < 0:
+        status = "LOSING"
+    else:
+        status = "BREAKEVEN"
+
+    return {
+        "Entry_Cost": round(entry_cost, 4),
+        "PnL_$": pnl_abs,
+        "PnL_%": pnl_pct,
+        "Status": status,
+    }
 
 
 def filter_actionable_signal(raw_signal: str, holding: str) -> str:
@@ -300,10 +392,12 @@ def run_check() -> None:
     ts_et = datetime.now(MARKET_TZ)
     ts = ts_et.strftime("%Y-%m-%d %H:%M:%S %Z")
     print(f"\n[{ts}] Fetching prices...")
-    holding = load_holding_state()
+    state = load_state()
+    holding = normalize_holding(state.get("holding"))
     print(f"  Current holding mode: {holding} (waiting for: {expected_signal_for_holding(holding)})")
     prices = fetch_prices()
     result = compute_delta(prices)
+    position_pnl = compute_position_pnl(result, holding, state)
     raw_signal = result["Signal"]
     result["Signal"] = filter_actionable_signal(raw_signal, holding)
     row = {"Timestamp": ts, **result}
@@ -313,6 +407,15 @@ def run_check() -> None:
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
     print(f"  Delta  : {result['Delta_$']} CAD  ({result['Delta_%']}%)")
+    if position_pnl["Status"] == "NO COST":
+        print(f"  Position P/L ({holding}): set LAST_SWITCH_COST_{holding} in .env to track win/loss.")
+    elif position_pnl["Status"] == "NO PRICE":
+        print(f"  Position P/L ({holding}): unavailable (price fetch failed).")
+    else:
+        print(
+            f"  Position P/L ({holding}) from {position_pnl['Entry_Cost']}: "
+            f"{position_pnl['PnL_$']:+.4f} CAD ({position_pnl['PnL_%']:+.2f}%) -> {position_pnl['Status']}"
+        )
     if raw_signal and raw_signal != "DATA ERROR" and not result["Signal"]:
         print(f"  Threshold reached ({raw_signal}) but ignored because current holding is {holding}.")
     if result["Signal"]:
@@ -320,7 +423,12 @@ def run_check() -> None:
         send_notification(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         new_holding = opposite_holding(holding)
-        save_holding_state(new_holding)
+        state["holding"] = new_holding
+        new_price_key = _price_key_for_holding(new_holding)
+        new_entry_price = result.get(new_price_key)
+        if new_entry_price is not None:
+            state.setdefault("cost_basis", {})[new_holding] = round(new_entry_price, 4)
+        save_state(state)
         print(f"  Holding mode flipped to {new_holding}. Next expected signal: {expected_signal_for_holding(new_holding)}")
     print(f"  Logged to {LOG_PATH}")
 
