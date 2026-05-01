@@ -101,6 +101,56 @@ If git is not configured or the push fails, the monitor continues running normal
 
 ---
 
+## Dashboard Tabs (Web Page)
+
+The Streamlit dashboard (`src/dashboard.py`) now has two tabs:
+
+1. **Live Monitor**
+  - Real-time monitor view with delta charts, price charts, and recent log entries.
+2. **Since Last Switch**
+  - Compares your actual switched path versus a no-switch path since your recorded switch date.
+  - Uses the latest available price per ticker even when timestamps differ, so the section remains usable outside market hours.
+  - Includes an editable form to update:
+    - `Last switch date`
+    - `Current holding` (`XST` or `XQQ`)
+    - `XST trade price`
+    - `XQQ trade price`
+    - `Approximate amount (CAD)`
+  - Shows both `Switch edge` (percentage points) and `Switch edge ($)` in CAD.
+
+The dashboard runs with Streamlit `runOnSave` enabled via `.streamlit/config.toml`, so code changes reload the web page automatically after save.
+
+### Example Calculation
+
+Assume your switch inputs are:
+
+- Last switch date: `2026-04-24`
+- Current holding: `XST`
+- XST trade price: `62.86`
+- XQQ trade price: `66.14`
+- Approximate amount: `10000` CAD
+
+And latest prices are:
+
+- `Price_XST = 63.38`
+- `Price_XQQ = 66.63`
+
+Then:
+
+- Switched return = `(63.38 / 62.86) - 1 = +0.827%`
+- No-switch return = `(66.63 / 66.14) - 1 = +0.741%`
+- Switch edge (pp) = `0.827% - 0.741% = +0.086 pp`
+
+For `10000` CAD:
+
+- Switched value = `10000 * (1 + 0.00827) = 10082.70`
+- No-switch value = `10000 * (1 + 0.00741) = 10074.10`
+- **Switch edge ($) = 10082.70 - 10074.10 = +8.60 CAD**
+
+The dashboard also shows a normalized per-share comparison in the caption.
+
+---
+
 ## Output Log
 
 Every check is appended to `src/monitor_log.csv`:

@@ -97,6 +97,18 @@ def parse_amount_text(value: str) -> float | None:
     return parsed
 
 
+def get_latest_price_snapshot(price_col: str) -> tuple[float | None, pd.Timestamp | None]:
+    if df.empty or price_col not in df.columns:
+        return None, None
+
+    snap = df.dropna(subset=[price_col]).sort_values("Timestamp")
+    if snap.empty:
+        return None, None
+
+    row = snap.iloc[-1]
+    return float(row[price_col]), pd.to_datetime(row["Timestamp"], errors="coerce")
+
+
 df = load_log()
 latest_raw = df.iloc[-1] if not df.empty else None
 valid_df = df[df["Signal"] != "DATA ERROR"].dropna(
@@ -333,6 +345,10 @@ def render_live_monitor_tab() -> None:
 
 def render_since_switch_tab() -> None:
     st.subheader("Since Last Switch: Switched vs No-Switch")
+    st.caption(
+        "This view uses the latest available price for each ticker independently, "
+        "so calculations still work outside business hours even when timestamps differ."
+    )
     state = load_position_state()
 
     if not state:
@@ -402,10 +418,6 @@ def render_since_switch_tab() -> None:
                 else:
                     st.error(f"Could not save position_state.json: {msg}")
 
-    if latest is None:
-        st.info("No valid latest price yet. Waiting for next successful fetch.")
-        return
-
     holding = str(state.get("holding", "")).strip().upper()
     if holding not in ("XST", "XQQ"):
         st.warning("State holding is missing or invalid. Expected XST or XQQ.")
@@ -424,8 +436,12 @@ def render_since_switch_tab() -> None:
         )
         return
 
-    current_now = float(latest[f"Price_{current_ticker}"])
-    previous_now = float(latest[f"Price_{previous_ticker}"])
+    current_now, current_now_ts = get_latest_price_snapshot(f"Price_{current_ticker}")
+    previous_now, previous_now_ts = get_latest_price_snapshot(f"Price_{previous_ticker}")
+
+    if current_now is None or previous_now is None:
+        st.info("No latest price snapshot yet for one or both tickers.")
+        return
 
     switched_ret = (current_now / float(current_entry)) - 1.0
     no_switch_ret = (previous_now / float(previous_entry)) - 1.0
@@ -456,6 +472,13 @@ def render_since_switch_tab() -> None:
         f"Normalized to selling 1 share of {previous_ticker} at ${float(previous_entry):.2f} on switch day: "
         f"switched path is {extra_cad:+.4f} CAD versus no-switch."
     )
+    if pd.notna(current_now_ts) and pd.notna(previous_now_ts):
+        current_ts_text = pd.Timestamp(current_now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        previous_ts_text = pd.Timestamp(previous_now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        st.caption(
+            f"Latest prices used: {current_ticker} at {current_ts_text} ET and "
+            f"{previous_ticker} at {previous_ts_text} ET (timestamps may differ outside market hours)."
+        )
 
     if edge > 0:
         st.success("Switching was better than not switching so far.")
