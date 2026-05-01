@@ -119,6 +119,10 @@ The Streamlit dashboard (`src/dashboard.py`) now has two tabs:
   - Shows `Switch edge (%)` in percent (2 decimal places) and `Switch edge ($)` in CAD.
   - Always displays the date/hour of the latest price used per ticker (may differ outside market hours).
 
+3. **Documentation**
+  - Renders this file (`docs/monitor.md`) as formatted Markdown directly in the web page.
+  - Updates automatically whenever the file is changed.
+
 The dashboard runs with Streamlit `runOnSave` enabled via `.streamlit/config.toml`, so code changes reload the web page automatically after save.
 
 ### Example Calculation
