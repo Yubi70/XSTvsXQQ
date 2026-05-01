@@ -116,7 +116,8 @@ The Streamlit dashboard (`src/dashboard.py`) now has two tabs:
     - `XST trade price`
     - `XQQ trade price`
     - `Approximate amount (CAD)`
-  - Shows both `Switch edge` (percentage points) and `Switch edge ($)` in CAD.
+  - Shows `Switch edge (%)` in percent (2 decimal places) and `Switch edge ($)` in CAD.
+  - Always displays the date/hour of the latest price used per ticker (may differ outside market hours).
 
 The dashboard runs with Streamlit `runOnSave` enabled via `.streamlit/config.toml`, so code changes reload the web page automatically after save.
 
@@ -139,7 +140,7 @@ Then:
 
 - Switched return = `(63.38 / 62.86) - 1 = +0.827%`
 - No-switch return = `(66.63 / 66.14) - 1 = +0.741%`
-- Switch edge (pp) = `0.827% - 0.741% = +0.086 pp`
+- Switch edge (%) = `0.827% - 0.741% = +0.09%`
 
 For `10000` CAD:
 
