@@ -521,12 +521,26 @@ def render_since_switch_tab() -> None:
             st.info("No valid rows available after last_switch_date yet.")
 
 
-tab_live, tab_since_switch = st.tabs(["Live Monitor", "Since Last Switch"])
+DOCS_PATH = Path(__file__).parent.parent / "docs" / "monitor.md"
+
+
+def render_docs_tab() -> None:
+    if not DOCS_PATH.exists():
+        st.warning(f"Documentation file not found: {DOCS_PATH}")
+        return
+    content = DOCS_PATH.read_text(encoding="utf-8")
+    st.markdown(content)
+
+
+tab_live, tab_since_switch, tab_docs = st.tabs(["Live Monitor", "Since Last Switch", "Documentation"])
 with tab_live:
     render_live_monitor_tab()
 
 with tab_since_switch:
     render_since_switch_tab()
+
+with tab_docs:
+    render_docs_tab()
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────────
 st.caption(f"Auto-refreshes every {REFRESH_SECONDS}s")
