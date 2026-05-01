@@ -455,9 +455,9 @@ def render_since_switch_tab() -> None:
     edge_cad = switched_value_amt - no_switch_value_amt
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Switched return", f"{switched_ret * 100:+.3f}%")
-    c2.metric("No-switch return", f"{no_switch_ret * 100:+.3f}%")
-    c3.metric("Switch edge (%)", f"{edge * 100:+.3f}%")
+    c1.metric("Switched return", f"{switched_ret * 100:+.2f}%")
+    c2.metric("No-switch return", f"{no_switch_ret * 100:+.2f}%")
+    c3.metric("Switch edge (%)", f"{edge * 100:+.2f}%")
     c4.metric("Switch edge ($)", f"${edge_cad:+,.2f}")
 
     switched_value = (float(previous_entry) / float(current_entry)) * current_now
