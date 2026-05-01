@@ -457,7 +457,7 @@ def render_since_switch_tab() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Switched return", f"{switched_ret * 100:+.3f}%")
     c2.metric("No-switch return", f"{no_switch_ret * 100:+.3f}%")
-    c3.metric("Switch edge", f"{edge * 100:+.3f} pp")
+    c3.metric("Switch edge (%)", f"{edge * 100:+.3f}%")
     c4.metric("Switch edge ($)", f"${edge_cad:+,.2f}")
 
     switched_value = (float(previous_entry) / float(current_entry)) * current_now
@@ -472,13 +472,12 @@ def render_since_switch_tab() -> None:
         f"Normalized to selling 1 share of {previous_ticker} at ${float(previous_entry):.2f} on switch day: "
         f"switched path is {extra_cad:+.4f} CAD versus no-switch."
     )
-    if pd.notna(current_now_ts) and pd.notna(previous_now_ts):
-        current_ts_text = pd.Timestamp(current_now_ts).strftime("%Y-%m-%d %H:%M:%S")
-        previous_ts_text = pd.Timestamp(previous_now_ts).strftime("%Y-%m-%d %H:%M:%S")
-        st.caption(
-            f"Latest prices used: {current_ticker} at {current_ts_text} ET and "
-            f"{previous_ticker} at {previous_ts_text} ET (timestamps may differ outside market hours)."
-        )
+    current_ts_text = "N/A" if pd.isna(current_now_ts) else pd.Timestamp(current_now_ts).strftime("%Y-%m-%d %H:%M")
+    previous_ts_text = "N/A" if pd.isna(previous_now_ts) else pd.Timestamp(previous_now_ts).strftime("%Y-%m-%d %H:%M")
+    st.caption(
+        f"Latest prices used: {current_ticker} at {current_ts_text} ET and "
+        f"{previous_ticker} at {previous_ts_text} ET (timestamps may differ outside market hours)."
+    )
 
     if edge > 0:
         st.success("Switching was better than not switching so far.")
