@@ -103,7 +103,7 @@ If git is not configured or the push fails, the monitor continues running normal
 
 ## Dashboard Tabs (Web Page)
 
-The Streamlit dashboard (`src/dashboard.py`) now has two tabs:
+The Streamlit dashboard (`src/dashboard.py`) now has three tabs:
 
 1. **Live Monitor**
   - Real-time monitor view with delta charts, price charts, and recent log entries.
