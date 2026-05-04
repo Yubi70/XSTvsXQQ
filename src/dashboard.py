@@ -545,6 +545,8 @@ def load_historical_delta() -> pd.DataFrame:
     same formula as the live monitor:
         Delta % = ((XST - XQQ) / ((XST + XQQ) / 2)) * 100
     Signals are flagged at |delta| >= 5%, split by direction.
+    Switch events are identified as the first day a new threshold is crossed after
+    having been below it (i.e. actual switch trigger, not every signal day).
     """
     xst = pd.read_csv(XST_HIST_PATH, usecols=["Date", "Price"])
     xqq = pd.read_csv(XQQ_HIST_PATH, usecols=["Date", "Price"])
@@ -552,12 +554,21 @@ def load_historical_delta() -> pd.DataFrame:
     xqq["Price"] = pd.to_numeric(xqq["Price"].astype(str).str.replace(",", ""), errors="coerce")
     merged = pd.merge(xst, xqq, on="Date", suffixes=("_XST", "_XQQ"))
     merged["Date"] = pd.to_datetime(merged["Date"], errors="coerce")
-    merged = merged.dropna().sort_values("Date")
+    merged = merged.dropna().sort_values("Date").reset_index(drop=True)
     avg = (merged["Price_XST"] + merged["Price_XQQ"]) / 2
     merged["Delta %"] = ((merged["Price_XST"] - merged["Price_XQQ"]) / avg) * 100
     merged["Signal"] = merged["Delta %"].apply(
         lambda x: "XST HIGH vs XQQ" if x >= 5.0 else ("XQQ HIGH vs XST" if x <= -5.0 else None)
     )
+    # Identify switch trigger days: first day signal fires after not being in that zone
+    switch_events = []
+    prev_signal = None
+    for _, row in merged.iterrows():
+        sig = row["Signal"]
+        if sig is not None and sig != prev_signal:
+            switch_events.append(row["Date"])
+        prev_signal = sig
+    merged["SwitchEvent"] = merged["Date"].isin(switch_events)
     return merged
 
 
@@ -585,42 +596,85 @@ def render_theory_tab() -> None:
     st.markdown("#### Historical Delta % over Time (symmetric formula, ±5% threshold)")
     if XST_HIST_PATH.exists() and XQQ_HIST_PATH.exists():
         dsig = load_historical_delta()
-        xst_high = dsig[dsig["Signal"] == "XST HIGH vs XQQ"]
-        xqq_high = dsig[dsig["Signal"] == "XQQ HIGH vs XST"]
+        switch_trigger_rows = dsig[dsig["SwitchEvent"]]
 
         fig = go.Figure()
+
+        # Shade background to show which stock is held between switches.
+        # Walk switch events and shade each holding period.
+        dates = dsig["Date"].tolist()
+        start_date = dates[0]
+        end_date   = dates[-1]
+        holding = "XST"   # assume starting position is XST (or whatever is first)
+        switch_dates = switch_trigger_rows["Date"].tolist()
+        switch_signals = switch_trigger_rows["Signal"].tolist()
+        zone_boundaries = list(zip(switch_dates, switch_signals))
+        prev_boundary = start_date
+        for sw_date, sw_signal in zone_boundaries:
+            color = "rgba(46,139,87,0.10)" if holding == "XST" else "rgba(210,40,40,0.10)"
+            label = f"Holding {holding}"
+            fig.add_vrect(
+                x0=prev_boundary, x1=sw_date,
+                fillcolor=color, opacity=1, layer="below", line_width=0,
+                annotation_text=label, annotation_position="top left",
+                annotation_font_size=9,
+            )
+            # After switch: flip holding based on signal direction
+            holding = "XQQ" if sw_signal == "XST HIGH vs XQQ" else "XST"
+            prev_boundary = sw_date
+        # Final zone to end
+        color = "rgba(46,139,87,0.10)" if holding == "XST" else "rgba(210,40,40,0.10)"
+        fig.add_vrect(
+            x0=prev_boundary, x1=end_date,
+            fillcolor=color, opacity=1, layer="below", line_width=0,
+            annotation_text=f"Holding {holding}", annotation_position="top left",
+            annotation_font_size=9,
+        )
+
+        # Delta % line
         fig.add_trace(go.Scatter(
             x=dsig["Date"], y=dsig["Delta %"],
             mode="lines", name="Delta %",
-            line=dict(color="#1f77b4", width=1.2),
+            line=dict(color="#1f77b4", width=1.4),
         ))
-        fig.add_hline(y=5,  line_dash="dash", line_color="red",  annotation_text="+5% → switch to XQQ")
+
+        # ±5% threshold lines
+        fig.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% → switch to XQQ")
         fig.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
         fig.add_hline(y=0,  line_dash="dot",  line_color="gray")
-        if not xst_high.empty:
+
+        # Switch trigger markers — one per actual switch event
+        xst_triggers = switch_trigger_rows[switch_trigger_rows["Signal"] == "XST HIGH vs XQQ"]
+        xqq_triggers = switch_trigger_rows[switch_trigger_rows["Signal"] == "XQQ HIGH vs XST"]
+        if not xst_triggers.empty:
             fig.add_trace(go.Scatter(
-                x=xst_high["Date"], y=xst_high["Delta %"],
-                mode="markers", name="XST HIGH → buy XQQ",
-                marker=dict(color="red", size=5, symbol="triangle-down"),
+                x=xst_triggers["Date"], y=xst_triggers["Delta %"],
+                mode="markers+text", name="Switch → buy XQQ",
+                text="→XQQ", textposition="top center",
+                marker=dict(color="red", size=10, symbol="triangle-down"),
             ))
-        if not xqq_high.empty:
+        if not xqq_triggers.empty:
             fig.add_trace(go.Scatter(
-                x=xqq_high["Date"], y=xqq_high["Delta %"],
-                mode="markers", name="XQQ HIGH → buy XST",
-                marker=dict(color="green", size=5, symbol="triangle-up"),
+                x=xqq_triggers["Date"], y=xqq_triggers["Delta %"],
+                mode="markers+text", name="Switch → buy XST",
+                text="→XST", textposition="bottom center",
+                marker=dict(color="green", size=10, symbol="triangle-up"),
             ))
+
         fig.update_layout(
-            height=400,
+            height=440,
             margin=dict(l=0, r=0, t=10, b=0),
             yaxis_title="Delta % (XST − XQQ) / avg",
             xaxis_title="Date",
             legend=dict(orientation="h", y=1.10),
         )
         st.plotly_chart(fig, width="stretch")
-        total_sig = len(xst_high) + len(xqq_high)
+        n_switches = len(switch_trigger_rows)
         st.caption(
-            f"Formula: ((Price_XST − Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) × 100  — "
-            f"same as the live monitor. {total_sig} days triggered a ≥5% signal across {len(dsig)} trading days."
+            f"Formula: ((Price_XST − Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) × 100 — "
+            f"same as the live monitor.  "
+            f"{n_switches} switch triggers across {len(dsig)} trading days.  "
+            f"Green shading = holding XST, red shading = holding XQQ."
         )
     else:
         st.warning("Historical price CSVs not found.")
