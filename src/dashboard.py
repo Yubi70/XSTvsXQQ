@@ -524,7 +524,8 @@ def render_since_switch_tab() -> None:
 SRC_PATH = Path(__file__).parent
 DOCS_PATH = SRC_PATH.parent / "docs" / "monitor.md"
 
-DELTA_SIGNALS_PATH     = SRC_PATH / "delta_signals.csv"
+XST_HIST_PATH          = SRC_PATH / "XST Historical Data (1).csv"
+XQQ_HIST_PATH          = SRC_PATH / "XQQ Historical Data (1).csv"
 DELTA_GROUPED_5Y_PATH  = SRC_PATH / "delta_grouped_5pct_last5y.csv"
 DELTA_GROUPED_2Y_PATH  = SRC_PATH / "delta_grouped_5pct_last2y.csv"
 REAL_SW_5Y_PATH        = SRC_PATH / "real_switches_last5y_5pct.csv"
@@ -535,6 +536,29 @@ IMG_SW_SIGNALS_2Y      = SRC_PATH / "switch_signals_last2y_3pct_5pct.png"
 IMG_SW_DURATION        = SRC_PATH / "switch_duration_graph.png"
 IMG_REAL_SW_5Y         = SRC_PATH / "real_switches_last5y_3pct_5pct.png"
 IMG_REAL_SW_2Y         = SRC_PATH / "real_switches_last2y_3pct_5pct.png"
+
+
+@st.cache_data(ttl=3600)
+def load_historical_delta() -> pd.DataFrame:
+    """
+    Compute signed symmetric delta from the raw historical price CSVs using the
+    same formula as the live monitor:
+        Delta % = ((XST - XQQ) / ((XST + XQQ) / 2)) * 100
+    Signals are flagged at |delta| >= 5%, split by direction.
+    """
+    xst = pd.read_csv(XST_HIST_PATH, usecols=["Date", "Price"])
+    xqq = pd.read_csv(XQQ_HIST_PATH, usecols=["Date", "Price"])
+    xst["Price"] = pd.to_numeric(xst["Price"].astype(str).str.replace(",", ""), errors="coerce")
+    xqq["Price"] = pd.to_numeric(xqq["Price"].astype(str).str.replace(",", ""), errors="coerce")
+    merged = pd.merge(xst, xqq, on="Date", suffixes=("_XST", "_XQQ"))
+    merged["Date"] = pd.to_datetime(merged["Date"], errors="coerce")
+    merged = merged.dropna().sort_values("Date")
+    avg = (merged["Price_XST"] + merged["Price_XQQ"]) / 2
+    merged["Delta %"] = ((merged["Price_XST"] - merged["Price_XQQ"]) / avg) * 100
+    merged["Signal"] = merged["Delta %"].apply(
+        lambda x: "XST HIGH vs XQQ" if x >= 5.0 else ("XQQ HIGH vs XST" if x <= -5.0 else None)
+    )
+    return merged
 
 
 @st.cache_data(ttl=3600)
@@ -558,14 +582,11 @@ def render_theory_tab() -> None:
     st.divider()
 
     # ── 1. Historical delta over time ─────────────────────────────────────────
-    st.markdown("#### Historical Delta % over Time")
-    if DELTA_SIGNALS_PATH.exists():
-        dsig = load_csv(DELTA_SIGNALS_PATH)
-        dsig["Date"] = pd.to_datetime(dsig["Date"], errors="coerce")
-        dsig = dsig.dropna(subset=["Date"]).sort_values("Date")
-        dsig["Delta %"] = pd.to_numeric(dsig["Delta %"], errors="coerce")
-
-        switch_rows = dsig.dropna(subset=["Signal"])
+    st.markdown("#### Historical Delta % over Time (symmetric formula, ±5% threshold)")
+    if XST_HIST_PATH.exists() and XQQ_HIST_PATH.exists():
+        dsig = load_historical_delta()
+        xst_high = dsig[dsig["Signal"] == "XST HIGH vs XQQ"]
+        xqq_high = dsig[dsig["Signal"] == "XQQ HIGH vs XST"]
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -573,25 +594,36 @@ def render_theory_tab() -> None:
             mode="lines", name="Delta %",
             line=dict(color="#1f77b4", width=1.2),
         ))
-        fig.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% threshold")
-        fig.add_hline(y=-5, line_dash="dash", line_color="red",   annotation_text="−5% threshold")
+        fig.add_hline(y=5,  line_dash="dash", line_color="red",  annotation_text="+5% → switch to XQQ")
+        fig.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
         fig.add_hline(y=0,  line_dash="dot",  line_color="gray")
-        if not switch_rows.empty:
+        if not xst_high.empty:
             fig.add_trace(go.Scatter(
-                x=switch_rows["Date"], y=switch_rows["Delta %"],
-                mode="markers", name="Switch signal",
-                marker=dict(color="orange", size=7, symbol="diamond"),
+                x=xst_high["Date"], y=xst_high["Delta %"],
+                mode="markers", name="XST HIGH → buy XQQ",
+                marker=dict(color="red", size=5, symbol="triangle-down"),
+            ))
+        if not xqq_high.empty:
+            fig.add_trace(go.Scatter(
+                x=xqq_high["Date"], y=xqq_high["Delta %"],
+                mode="markers", name="XQQ HIGH → buy XST",
+                marker=dict(color="green", size=5, symbol="triangle-up"),
             ))
         fig.update_layout(
-            height=380,
+            height=400,
             margin=dict(l=0, r=0, t=10, b=0),
-            yaxis_title="Delta %",
+            yaxis_title="Delta % (XST − XQQ) / avg",
             xaxis_title="Date",
-            legend=dict(orientation="h", y=1.08),
+            legend=dict(orientation="h", y=1.10),
         )
         st.plotly_chart(fig, width="stretch")
+        total_sig = len(xst_high) + len(xqq_high)
+        st.caption(
+            f"Formula: ((Price_XST − Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) × 100  — "
+            f"same as the live monitor. {total_sig} days triggered a ≥5% signal across {len(dsig)} trading days."
+        )
     else:
-        st.info("delta_signals.csv not found.")
+        st.warning("Historical price CSVs not found.")
 
     st.divider()
 
