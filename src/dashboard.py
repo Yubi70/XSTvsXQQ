@@ -677,6 +677,79 @@ def render_theory_tab() -> None:
 
     st.divider()
 
+    # ── 1b. Historical delta — last 5 years ───────────────────────────────────
+    st.markdown("#### Historical Delta % — Last 5 Years")
+    if XST_HIST_PATH.exists() and XQQ_HIST_PATH.exists():
+        dsig_all = load_historical_delta()
+        cutoff = dsig_all["Date"].max() - pd.DateOffset(years=5)
+        dsig5 = dsig_all[dsig_all["Date"] >= cutoff].copy()
+        sw5 = dsig5[dsig5["SwitchEvent"]].copy()
+
+        fig5 = go.Figure()
+
+        dates5    = dsig5["Date"].tolist()
+        sw_dates5 = sw5["Date"].tolist()
+        sw_tos5   = sw5["SwitchTo"].tolist()
+        bounds5 = [dates5[0]] + sw_dates5 + [dates5[-1]]
+        # Determine holding state at the start of the 5-year window
+        # by replaying the full history up to the cutoff
+        holding5 = "XST"
+        for _, row in dsig_all[dsig_all["Date"] < cutoff].iterrows():
+            if row["SwitchEvent"]:
+                holding5 = row["SwitchTo"]
+        zone_h5 = holding5
+        for i in range(len(bounds5) - 1):
+            color5 = "rgba(46,139,87,0.12)" if zone_h5 == "XST" else "rgba(210,40,40,0.12)"
+            fig5.add_vrect(
+                x0=bounds5[i], x1=bounds5[i + 1],
+                fillcolor=color5, opacity=1, layer="below", line_width=0,
+            )
+            if i < len(sw_tos5):
+                zone_h5 = sw_tos5[i]
+
+        fig5.add_trace(go.Scatter(
+            x=dsig5["Date"], y=dsig5["Delta %"],
+            mode="lines", name="Delta %",
+            line=dict(color="#1f77b4", width=1.4),
+        ))
+        fig5.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% → switch to XQQ")
+        fig5.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
+        fig5.add_hline(y=0,  line_dash="dot",  line_color="gray")
+
+        xst5 = sw5[sw5["SwitchTo"] == "XQQ"]
+        xqq5 = sw5[sw5["SwitchTo"] == "XST"]
+        if not xst5.empty:
+            fig5.add_trace(go.Scatter(
+                x=xst5["Date"], y=xst5["Delta %"],
+                mode="markers+text", name="Switch → buy XQQ",
+                text="→XQQ", textposition="top center",
+                marker=dict(color="red", size=10, symbol="triangle-down"),
+            ))
+        if not xqq5.empty:
+            fig5.add_trace(go.Scatter(
+                x=xqq5["Date"], y=xqq5["Delta %"],
+                mode="markers+text", name="Switch → buy XST",
+                text="→XST", textposition="bottom center",
+                marker=dict(color="green", size=10, symbol="triangle-up"),
+            ))
+
+        fig5.update_layout(
+            height=440,
+            margin=dict(l=0, r=0, t=10, b=0),
+            yaxis_title="Delta % (XST − XQQ) / avg",
+            xaxis_title="Date",
+            legend=dict(orientation="h", y=1.10),
+        )
+        st.plotly_chart(fig5, width="stretch")
+        st.caption(
+            f"{len(sw5)} switch triggers in the last 5 years ({len(dsig5)} trading days).  "
+            f"Green shading = holding XST, red shading = holding XQQ."
+        )
+    else:
+        st.warning("Historical price CSVs not found.")
+
+    st.divider()
+
     # ── 2. Delta distribution ──────────────────────────────────────────────────
     st.markdown("#### Delta Distribution — How Often Does the Gap Exceed 5%?")
     dcol1, dcol2 = st.columns(2)
