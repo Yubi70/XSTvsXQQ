@@ -560,15 +560,25 @@ def load_historical_delta() -> pd.DataFrame:
     merged["Signal"] = merged["Delta %"].apply(
         lambda x: "XST HIGH vs XQQ" if x >= 5.0 else ("XQQ HIGH vs XST" if x <= -5.0 else None)
     )
-    # Identify switch trigger days: first day signal fires after not being in that zone
-    switch_events = []
-    prev_signal = None
+    # Track holding state: only fire a switch when the held stock needs to change.
+    # Starting assumption: holding XST (first historical position).
+    holding = "XST"
+    switch_dates = []
+    switch_to    = []
     for _, row in merged.iterrows():
         sig = row["Signal"]
-        if sig is not None and sig != prev_signal:
-            switch_events.append(row["Date"])
-        prev_signal = sig
-    merged["SwitchEvent"] = merged["Date"].isin(switch_events)
+        if sig == "XST HIGH vs XQQ" and holding == "XST":
+            switch_dates.append(row["Date"])
+            switch_to.append("XQQ")
+            holding = "XQQ"
+        elif sig == "XQQ HIGH vs XST" and holding == "XQQ":
+            switch_dates.append(row["Date"])
+            switch_to.append("XST")
+            holding = "XST"
+    sw = pd.DataFrame({"Date": switch_dates, "SwitchTo": switch_to})
+    merged["SwitchEvent"] = merged["Date"].isin(switch_dates)
+    merged["_switch_key"] = merged["Date"]
+    merged = merged.merge(sw.rename(columns={"Date": "_switch_key"}), on="_switch_key", how="left").drop(columns="_switch_key")
     return merged
 
 
@@ -596,40 +606,27 @@ def render_theory_tab() -> None:
     st.markdown("#### Historical Delta % over Time (symmetric formula, ±5% threshold)")
     if XST_HIST_PATH.exists() and XQQ_HIST_PATH.exists():
         dsig = load_historical_delta()
-        switch_trigger_rows = dsig[dsig["SwitchEvent"]]
+        sw_rows = dsig[dsig["SwitchEvent"]].copy()
 
         fig = go.Figure()
 
-        # Shade background to show which stock is held between switches.
-        # Walk switch events and shade each holding period.
-        dates = dsig["Date"].tolist()
-        start_date = dates[0]
-        end_date   = dates[-1]
-        holding = "XST"   # assume starting position is XST (or whatever is first)
-        switch_dates = switch_trigger_rows["Date"].tolist()
-        switch_signals = switch_trigger_rows["Signal"].tolist()
-        zone_boundaries = list(zip(switch_dates, switch_signals))
-        prev_boundary = start_date
-        for sw_date, sw_signal in zone_boundaries:
-            color = "rgba(46,139,87,0.10)" if holding == "XST" else "rgba(210,40,40,0.10)"
-            label = f"Holding {holding}"
+        # Shade holding zones between consecutive switch events
+        dates     = dsig["Date"].tolist()
+        sw_dates  = sw_rows["Date"].tolist()
+        sw_tos    = sw_rows["SwitchTo"].tolist()
+        # Build zone list: (zone_start, zone_end, holding_in_this_zone)
+        boundaries = [dates[0]] + sw_dates + [dates[-1]]
+        # Holding before first switch is opposite of what first switch switches TO
+        first_holding = "XST" if (not sw_tos or sw_tos[0] == "XQQ") else "XQQ"
+        zone_holding = first_holding
+        for i in range(len(boundaries) - 1):
+            color = "rgba(46,139,87,0.12)" if zone_holding == "XST" else "rgba(210,40,40,0.12)"
             fig.add_vrect(
-                x0=prev_boundary, x1=sw_date,
+                x0=boundaries[i], x1=boundaries[i + 1],
                 fillcolor=color, opacity=1, layer="below", line_width=0,
-                annotation_text=label, annotation_position="top left",
-                annotation_font_size=9,
             )
-            # After switch: flip holding based on signal direction
-            holding = "XQQ" if sw_signal == "XST HIGH vs XQQ" else "XST"
-            prev_boundary = sw_date
-        # Final zone to end
-        color = "rgba(46,139,87,0.10)" if holding == "XST" else "rgba(210,40,40,0.10)"
-        fig.add_vrect(
-            x0=prev_boundary, x1=end_date,
-            fillcolor=color, opacity=1, layer="below", line_width=0,
-            annotation_text=f"Holding {holding}", annotation_position="top left",
-            annotation_font_size=9,
-        )
+            if i < len(sw_tos):
+                zone_holding = sw_tos[i]
 
         # Delta % line
         fig.add_trace(go.Scatter(
@@ -643,19 +640,19 @@ def render_theory_tab() -> None:
         fig.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
         fig.add_hline(y=0,  line_dash="dot",  line_color="gray")
 
-        # Switch trigger markers — one per actual switch event
-        xst_triggers = switch_trigger_rows[switch_trigger_rows["Signal"] == "XST HIGH vs XQQ"]
-        xqq_triggers = switch_trigger_rows[switch_trigger_rows["Signal"] == "XQQ HIGH vs XST"]
-        if not xst_triggers.empty:
+        # Switch trigger markers
+        xst_sw = sw_rows[sw_rows["SwitchTo"] == "XQQ"]
+        xqq_sw = sw_rows[sw_rows["SwitchTo"] == "XST"]
+        if not xst_sw.empty:
             fig.add_trace(go.Scatter(
-                x=xst_triggers["Date"], y=xst_triggers["Delta %"],
+                x=xst_sw["Date"], y=xst_sw["Delta %"],
                 mode="markers+text", name="Switch → buy XQQ",
                 text="→XQQ", textposition="top center",
                 marker=dict(color="red", size=10, symbol="triangle-down"),
             ))
-        if not xqq_triggers.empty:
+        if not xqq_sw.empty:
             fig.add_trace(go.Scatter(
-                x=xqq_triggers["Date"], y=xqq_triggers["Delta %"],
+                x=xqq_sw["Date"], y=xqq_sw["Delta %"],
                 mode="markers+text", name="Switch → buy XST",
                 text="→XST", textposition="bottom center",
                 marker=dict(color="green", size=10, symbol="triangle-up"),
@@ -669,11 +666,10 @@ def render_theory_tab() -> None:
             legend=dict(orientation="h", y=1.10),
         )
         st.plotly_chart(fig, width="stretch")
-        n_switches = len(switch_trigger_rows)
         st.caption(
             f"Formula: ((Price_XST − Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) × 100 — "
             f"same as the live monitor.  "
-            f"{n_switches} switch triggers across {len(dsig)} trading days.  "
+            f"{len(sw_rows)} actual switch triggers across {len(dsig)} trading days.  "
             f"Green shading = holding XST, red shading = holding XQQ."
         )
     else:
