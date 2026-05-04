@@ -521,7 +521,168 @@ def render_since_switch_tab() -> None:
             st.info("No valid rows available after last_switch_date yet.")
 
 
-DOCS_PATH = Path(__file__).parent.parent / "docs" / "monitor.md"
+SRC_PATH = Path(__file__).parent
+DOCS_PATH = SRC_PATH.parent / "docs" / "monitor.md"
+
+DELTA_SIGNALS_PATH     = SRC_PATH / "delta_signals.csv"
+DELTA_GROUPED_5Y_PATH  = SRC_PATH / "delta_grouped_5pct_last5y.csv"
+DELTA_GROUPED_2Y_PATH  = SRC_PATH / "delta_grouped_5pct_last2y.csv"
+REAL_SW_5Y_PATH        = SRC_PATH / "real_switches_last5y_5pct.csv"
+REAL_SW_2Y_PATH        = SRC_PATH / "real_switches_last2y_5pct.csv"
+STRATEGY_PATH          = SRC_PATH / "strategy_vs_50_50.csv"
+IMG_SW_SIGNALS_5Y      = SRC_PATH / "switch_signals_last5y_3pct_5pct.png"
+IMG_SW_SIGNALS_2Y      = SRC_PATH / "switch_signals_last2y_3pct_5pct.png"
+IMG_SW_DURATION        = SRC_PATH / "switch_duration_graph.png"
+IMG_REAL_SW_5Y         = SRC_PATH / "real_switches_last5y_3pct_5pct.png"
+IMG_REAL_SW_2Y         = SRC_PATH / "real_switches_last2y_3pct_5pct.png"
+
+
+@st.cache_data(ttl=3600)
+def load_csv(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
+def render_theory_tab() -> None:
+    st.subheader("The Historical Theory")
+    st.markdown(
+        """
+        **Strategy logic:** XST (Staples) and XQQ (NASDAQ 100 Hedged) are both Canadian ETFs that tend to
+        mean-revert relative to each other. When one pulls ahead by **≥ 5%** (measured as a symmetric
+        percentage of their average price), the lagging ETF is historically likely to catch up — making
+        it advantageous to switch into it.
+
+        The charts below use ~14 years of daily closing prices to validate this thesis.
+        """
+    )
+
+    st.divider()
+
+    # ── 1. Historical delta over time ─────────────────────────────────────────
+    st.markdown("#### Historical Delta % over Time")
+    if DELTA_SIGNALS_PATH.exists():
+        dsig = load_csv(DELTA_SIGNALS_PATH)
+        dsig["Date"] = pd.to_datetime(dsig["Date"], errors="coerce")
+        dsig = dsig.dropna(subset=["Date"]).sort_values("Date")
+        dsig["Delta %"] = pd.to_numeric(dsig["Delta %"], errors="coerce")
+
+        switch_rows = dsig.dropna(subset=["Signal"])
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=dsig["Date"], y=dsig["Delta %"],
+            mode="lines", name="Delta %",
+            line=dict(color="#1f77b4", width=1.2),
+        ))
+        fig.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% threshold")
+        fig.add_hline(y=-5, line_dash="dash", line_color="red",   annotation_text="−5% threshold")
+        fig.add_hline(y=0,  line_dash="dot",  line_color="gray")
+        if not switch_rows.empty:
+            fig.add_trace(go.Scatter(
+                x=switch_rows["Date"], y=switch_rows["Delta %"],
+                mode="markers", name="Switch signal",
+                marker=dict(color="orange", size=7, symbol="diamond"),
+            ))
+        fig.update_layout(
+            height=380,
+            margin=dict(l=0, r=0, t=10, b=0),
+            yaxis_title="Delta %",
+            xaxis_title="Date",
+            legend=dict(orientation="h", y=1.08),
+        )
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.info("delta_signals.csv not found.")
+
+    st.divider()
+
+    # ── 2. Delta distribution ──────────────────────────────────────────────────
+    st.markdown("#### Delta Distribution — How Often Does the Gap Exceed 5%?")
+    dcol1, dcol2 = st.columns(2)
+    for col, path, label in [
+        (dcol1, DELTA_GROUPED_5Y_PATH, "Last 5 years"),
+        (dcol2, DELTA_GROUPED_2Y_PATH, "Last 2 years"),
+    ]:
+        if path.exists():
+            dg = load_csv(path)
+            bar_fig = go.Figure(go.Bar(
+                x=dg["Delta Range (%)"], y=dg["Occurrences"],
+                marker_color=["#2E8B57" if i == 0 else "#d62728" for i in range(len(dg))],
+                text=dg["Occurrences"], textposition="outside",
+            ))
+            bar_fig.update_layout(
+                title=label, height=320,
+                margin=dict(l=0, r=0, t=40, b=0),
+                yaxis_title="Days",
+                xaxis_title="Delta range",
+            )
+            col.plotly_chart(bar_fig, width="stretch")
+
+    st.caption(
+        "Green bar = within ±5% (hold); red bars = above threshold where a switch signal fires."
+    )
+
+    st.divider()
+
+    # ── 3. Switch signals charts (static images) ──────────────────────────────
+    st.markdown("#### Switch Signals on Price History")
+    icol1, icol2 = st.columns(2)
+    if IMG_SW_SIGNALS_5Y.exists():
+        icol1.image(str(IMG_SW_SIGNALS_5Y), caption="Last 5 years — 3% & 5% thresholds", use_container_width=True)
+    if IMG_SW_SIGNALS_2Y.exists():
+        icol2.image(str(IMG_SW_SIGNALS_2Y), caption="Last 2 years — 3% & 5% thresholds", use_container_width=True)
+
+    st.divider()
+
+    # ── 4. Real switches table ─────────────────────────────────────────────────
+    st.markdown("#### Real Switches at 5% Threshold")
+    rcol1, rcol2 = st.columns(2)
+    for col, path, label in [
+        (rcol1, REAL_SW_5Y_PATH, "Last 5 years"),
+        (rcol2, REAL_SW_2Y_PATH, "Last 2 years"),
+    ]:
+        if path.exists():
+            rsw = load_csv(path)
+            col.markdown(f"**{label}**")
+            col.dataframe(rsw, hide_index=True, use_container_width=True)
+
+    imgcol1, imgcol2 = st.columns(2)
+    if IMG_REAL_SW_5Y.exists():
+        imgcol1.image(str(IMG_REAL_SW_5Y), caption="Real switches — last 5 years", use_container_width=True)
+    if IMG_REAL_SW_2Y.exists():
+        imgcol2.image(str(IMG_REAL_SW_2Y), caption="Real switches — last 2 years", use_container_width=True)
+
+    st.divider()
+
+    # ── 5. Switch duration ────────────────────────────────────────────────────
+    st.markdown("#### Switch Duration Distribution")
+    if IMG_SW_DURATION.exists():
+        st.image(str(IMG_SW_DURATION), caption="How long each switch cycle lasts", use_container_width=True)
+
+    st.divider()
+
+    # ── 6. Strategy vs 50/50 ─────────────────────────────────────────────────
+    st.markdown("#### Strategy Return vs Passive 50/50 Split")
+    if STRATEGY_PATH.exists():
+        strat = load_csv(STRATEGY_PATH)
+        # Highlight rows where strategy beats 50/50
+        def _highlight_edge(row):
+            return ["background-color: #d4edda" if row["Diff vs 50_50 (pp)"] > 0 else ""] * len(row)
+
+        st.dataframe(
+            strat.style.apply(_highlight_edge, axis=1).format({
+                "Strategy return %": "{:.2f}%",
+                "50_50 return %": "{:.2f}%",
+                "Diff vs 50_50 (pp)": "{:+.2f} pp",
+            }),
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.caption(
+            "Green rows = switch strategy outperformed a passive 50/50 XST+XQQ portfolio "
+            "over the same window."
+        )
+    else:
+        st.info("strategy_vs_50_50.csv not found.")
 
 
 def render_docs_tab() -> None:
@@ -532,12 +693,17 @@ def render_docs_tab() -> None:
     st.markdown(content)
 
 
-tab_live, tab_since_switch, tab_docs = st.tabs(["Live Monitor", "Since Last Switch", "Documentation"])
+tab_live, tab_since_switch, tab_theory, tab_docs = st.tabs(
+    ["Live Monitor", "Since Last Switch", "The Historical Theory", "Documentation"]
+)
 with tab_live:
     render_live_monitor_tab()
 
 with tab_since_switch:
     render_since_switch_tab()
+
+with tab_theory:
+    render_theory_tab()
 
 with tab_docs:
     render_docs_tab()
