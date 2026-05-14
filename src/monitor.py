@@ -299,12 +299,15 @@ def _append_git_sync_log(message: str) -> None:
 
 def git_push_log() -> None:
     """Commit and push the updated monitor_log.csv to GitHub."""
+    import os as _os
+    _git_env = {**_os.environ, "GCM_CREDENTIAL_STORE": "dpapi", "GIT_TERMINAL_PROMPT": "0"}
     try:
         status = subprocess.run(
             ["git", "-C", REPO_ROOT, "status", "--porcelain", "src/monitor_log.csv"],
             capture_output=True,
             text=True,
             check=True,
+            env=_git_env,
         )
         if not status.stdout.strip():
             _append_git_sync_log("No monitor_log.csv changes to push.")
@@ -315,11 +318,13 @@ def git_push_log() -> None:
             capture_output=True,
             text=True,
             check=True,
+            env=_git_env,
         )
         commit = subprocess.run(
             ["git", "-C", REPO_ROOT, "commit", "-m", "chore: update monitor_log.csv"],
             capture_output=True,
             text=True,
+            env=_git_env,
         )
         if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr).lower():
             raise subprocess.CalledProcessError(commit.returncode, commit.args, commit.stdout, commit.stderr)
@@ -329,6 +334,7 @@ def git_push_log() -> None:
             capture_output=True,
             text=True,
             check=True,
+            env=_git_env,
         )
         _append_git_sync_log("Pushed monitor_log.csv to origin/main.")
         print("  monitor_log.csv pushed to GitHub.")
