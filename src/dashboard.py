@@ -19,6 +19,15 @@ GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
 STATE_PATH = Path(__file__).parent / "position_state.json"
 SIGNAL_THRESHOLD = 5.0
 REFRESH_SECONDS = 30
+DEFAULT_SWITCH_INPUTS = {
+    "holding": "XST",
+    "last_switch_date": "2026-04-24",
+    "cost_basis": {
+        "XST": 62.86,
+        "XQQ": 66.14,
+    },
+    "approx_amount_cad": 440000.0,
+}
 
 st.set_page_config(page_title="XST vs XQQ Monitor", layout="wide")
 st.title("XST vs XQQ Live Monitor")
@@ -352,30 +361,35 @@ def render_since_switch_tab() -> None:
     state = load_position_state()
 
     if not state:
-        state = {
-            "holding": "XST",
-            "last_switch_date": "",
-            "cost_basis": {"XST": None, "XQQ": None},
-            "approx_amount_cad": 10000.0,
-        }
+        state = {}
 
-    state_holding = str(state.get("holding", "XST")).strip().upper()
+    state_holding = str(state.get("holding", DEFAULT_SWITCH_INPUTS["holding"])).strip().upper()
     if state_holding not in ("XST", "XQQ"):
-        state_holding = "XST"
-    state_switch_date_text = str(state.get("last_switch_date", "")).strip()
+        state_holding = DEFAULT_SWITCH_INPUTS["holding"]
+    state_switch_date_text = str(state.get("last_switch_date", DEFAULT_SWITCH_INPUTS["last_switch_date"])).strip()
     state_switch_date = pd.to_datetime(state_switch_date_text, errors="coerce")
     if pd.notna(state_switch_date):
         default_switch_date = state_switch_date.date()
-    elif not valid_df.empty:
-        default_switch_date = valid_df["Timestamp"].max().date()
     else:
-        default_switch_date = pd.Timestamp.now().date()
+        default_switch_date = pd.to_datetime(DEFAULT_SWITCH_INPUTS["last_switch_date"]).date()
 
     state_cost_basis = state.get("cost_basis") or {}
-    state_xst_text = "" if state_cost_basis.get("XST") is None else f"{float(state_cost_basis.get('XST')):.4f}"
-    state_xqq_text = "" if state_cost_basis.get("XQQ") is None else f"{float(state_cost_basis.get('XQQ')):.4f}"
+    state_xst_text = (
+        f"{float(DEFAULT_SWITCH_INPUTS['cost_basis']['XST']):.4f}"
+        if state_cost_basis.get("XST") is None
+        else f"{float(state_cost_basis.get('XST')):.4f}"
+    )
+    state_xqq_text = (
+        f"{float(DEFAULT_SWITCH_INPUTS['cost_basis']['XQQ']):.4f}"
+        if state_cost_basis.get("XQQ") is None
+        else f"{float(state_cost_basis.get('XQQ')):.4f}"
+    )
     state_amount = pd.to_numeric(state.get("approx_amount_cad"), errors="coerce")
-    state_amount_text = "10000" if pd.isna(state_amount) or float(state_amount) <= 0 else f"{float(state_amount):.2f}"
+    state_amount_text = (
+        f"{float(DEFAULT_SWITCH_INPUTS['approx_amount_cad']):.2f}"
+        if pd.isna(state_amount) or float(state_amount) <= 0
+        else f"{float(state_amount):.2f}"
+    )
 
     with st.expander("Edit switch inputs", expanded=False):
         with st.form("switch_inputs_form"):
@@ -418,12 +432,23 @@ def render_since_switch_tab() -> None:
                 else:
                     st.error(f"Could not save position_state.json: {msg}")
 
-    holding = str(state.get("holding", "")).strip().upper()
+    # Build an effective state so defaults are used immediately when file values are missing.
+    effective_state = {
+        "holding": state_holding,
+        "last_switch_date": state_switch_date_text,
+        "cost_basis": {
+            "XST": parse_price_text(str((state.get("cost_basis") or {}).get("XST") or state_xst_text)),
+            "XQQ": parse_price_text(str((state.get("cost_basis") or {}).get("XQQ") or state_xqq_text)),
+        },
+        "approx_amount_cad": parse_amount_text(str(state.get("approx_amount_cad") or state_amount_text)),
+    }
+
+    holding = str(effective_state.get("holding", "")).strip().upper()
     if holding not in ("XST", "XQQ"):
         st.warning("State holding is missing or invalid. Expected XST or XQQ.")
         return
 
-    cost_basis = state.get("cost_basis") or {}
+    cost_basis = effective_state.get("cost_basis") or {}
     current_ticker = holding
     previous_ticker = "XQQ" if current_ticker == "XST" else "XST"
     current_entry = pd.to_numeric(cost_basis.get(current_ticker), errors="coerce")
@@ -446,7 +471,7 @@ def render_since_switch_tab() -> None:
     switched_ret = (current_now / float(current_entry)) - 1.0
     no_switch_ret = (previous_now / float(previous_entry)) - 1.0
     edge = switched_ret - no_switch_ret
-    approx_amount = pd.to_numeric(state.get("approx_amount_cad"), errors="coerce")
+    approx_amount = pd.to_numeric(effective_state.get("approx_amount_cad"), errors="coerce")
     if pd.isna(approx_amount) or float(approx_amount) <= 0:
         approx_amount = 10000.0
 
@@ -486,7 +511,7 @@ def render_since_switch_tab() -> None:
     else:
         st.info("Switched and no-switch paths are currently tied.")
 
-    switch_date_text = str(state.get("last_switch_date", "")).strip()
+    switch_date_text = str(effective_state.get("last_switch_date", "")).strip()
     switch_ts = pd.to_datetime(switch_date_text, errors="coerce") if switch_date_text else pd.NaT
     if pd.notna(switch_ts):
         since_df = valid_df[valid_df["Timestamp"] >= switch_ts].copy()
