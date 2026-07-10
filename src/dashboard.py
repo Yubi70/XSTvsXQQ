@@ -33,6 +33,28 @@ st.set_page_config(page_title="XST vs XQQ Monitor", layout="wide")
 st.title("XST vs XQQ Live Monitor")
 
 
+def get_query_param(key: str, default: str) -> str:
+    if hasattr(st, "query_params"):
+        value = st.query_params.get(key, default)
+        if isinstance(value, list):
+            return value[0] if value else default
+        return value
+
+    # Backward-compatible fallback for older Streamlit versions.
+    values = st.experimental_get_query_params().get(key, [default])
+    return values[0] if values else default
+
+
+def set_query_param(key: str, value: str) -> None:
+    if hasattr(st, "query_params"):
+        st.query_params[key] = value
+        return
+
+    params = st.experimental_get_query_params()
+    params[key] = [value]
+    st.experimental_set_query_params(**params)
+
+
 @st.cache_data(ttl=REFRESH_SECONDS)
 def load_log() -> pd.DataFrame:
     # Skip malformed rows so one bad write never crashes the dashboard.
@@ -204,9 +226,7 @@ def render_live_monitor_tab() -> None:
 
     filter_options = ["Today", "Last week", "Last month", "All time"]
 
-    query_filter = st.query_params.get("filter", "Last week")
-    if isinstance(query_filter, list):
-        query_filter = query_filter[0] if query_filter else "Last week"
+    query_filter = get_query_param("filter", "Last week")
     if query_filter not in filter_options:
         query_filter = "Last week"
 
@@ -214,11 +234,11 @@ def render_live_monitor_tab() -> None:
         st.session_state["date_filter"] = query_filter
 
     def sync_filter_query_params() -> None:
-        st.query_params["filter"] = st.session_state["date_filter"]
+        set_query_param("filter", st.session_state["date_filter"])
 
     def set_date_filter(value: str) -> None:
         st.session_state["date_filter"] = value
-        st.query_params["filter"] = value
+        set_query_param("filter", value)
 
     quick_filter_cols = st.columns(4)
     quick_filter_labels = ["Today", "Last week", "Last month", "All time"]
@@ -238,8 +258,8 @@ def render_live_monitor_tab() -> None:
         on_change=sync_filter_query_params,
     )
 
-    if st.query_params.get("filter") != date_filter:
-        st.query_params["filter"] = date_filter
+    if get_query_param("filter", "") != date_filter:
+        set_query_param("filter", date_filter)
 
     if not df.empty:
         end_ts = df["Timestamp"].max()
