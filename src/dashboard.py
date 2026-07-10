@@ -226,7 +226,7 @@ def render_live_monitor_tab() -> None:
         col.button(
             label,
             key=f"quick_filter_{label.replace(' ', '_').lower()}",
-            width="stretch",
+            use_container_width=True,
             on_click=set_date_filter,
             args=(label,),
         )
@@ -287,7 +287,7 @@ def render_live_monitor_tab() -> None:
         yaxis_title="Delta %",
         xaxis_title="Timestamp (ET)",
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
     st.subheader("Ticker prices over time")
@@ -320,7 +320,7 @@ def render_live_monitor_tab() -> None:
             xaxis_title="Timestamp (ET)",
             yaxis=dict(tickprefix="$", tickformat=".2f"),
         )
-        st.plotly_chart(price_fig, width="stretch")
+        st.plotly_chart(price_fig, use_container_width=True)
 
     st.divider()
     st.subheader("Recent log entries")
@@ -347,7 +347,7 @@ def render_live_monitor_tab() -> None:
     st.dataframe(
         recent[["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]]
         .style.apply(highlight_signal, axis=1),
-        width="stretch",
+        use_container_width=True,
         height=400,
     )
 
@@ -404,7 +404,7 @@ def render_since_switch_tab() -> None:
             form_xst = pcol1.text_input("XST trade price", value=state_xst_text, placeholder="e.g. 62.86")
             form_xqq = pcol2.text_input("XQQ trade price", value=state_xqq_text, placeholder="e.g. 66.14")
             form_amount = st.text_input("Approximate amount (CAD)", value=state_amount_text, placeholder="e.g. 10000")
-            submitted = st.form_submit_button("Save switch inputs", width="stretch")
+            submitted = st.form_submit_button("Save switch inputs", use_container_width=True)
 
         if submitted:
             new_xst = parse_price_text(form_xst)
@@ -541,7 +541,7 @@ def render_since_switch_tab() -> None:
                 yaxis_title="Indexed value (100 = switch date)",
                 xaxis_title="Timestamp (ET)",
             )
-            st.plotly_chart(comp_fig, width="stretch")
+            st.plotly_chart(comp_fig, use_container_width=True)
         else:
             st.info("No valid rows available after last_switch_date yet.")
 
@@ -690,7 +690,7 @@ def render_theory_tab() -> None:
             xaxis_title="Date",
             legend=dict(orientation="h", y=1.10),
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
         st.caption(
             f"Formula: ((Price_XST − Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) × 100 — "
             f"same as the live monitor.  "
@@ -765,7 +765,7 @@ def render_theory_tab() -> None:
             xaxis_title="Date",
             legend=dict(orientation="h", y=1.10),
         )
-        st.plotly_chart(fig5, width="stretch")
+        st.plotly_chart(fig5, use_container_width=True)
         st.caption(
             f"{len(sw5)} switch triggers in the last 5 years ({len(dsig5)} trading days).  "
             f"Green shading = holding XST, red shading = holding XQQ."
@@ -795,7 +795,7 @@ def render_theory_tab() -> None:
                 yaxis_title="Days",
                 xaxis_title="Delta range",
             )
-            col.plotly_chart(bar_fig, width="stretch")
+            col.plotly_chart(bar_fig, use_container_width=True)
 
     st.caption(
         "Green bar = within ±5% (hold); red bars = above threshold where a switch signal fires."
