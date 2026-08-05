@@ -7,4 +7,5 @@ pytz
 python-dotenv
 streamlit
 streamlit-autorefresh
+starlette<1.0
 plotly
