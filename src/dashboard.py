@@ -13,7 +13,10 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st_autorefresh = None
 
 LOG_PATH = Path(__file__).parent / "monitor_log.csv"
 GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
@@ -924,4 +927,9 @@ with tab_docs:
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────────
 st.caption(f"Auto-refreshes every {REFRESH_SECONDS}s")
-st_autorefresh(interval=REFRESH_SECONDS * 1000, key="dashboard_autorefresh")
+if st_autorefresh is not None:
+    st_autorefresh(interval=REFRESH_SECONDS * 1000, key="dashboard_autorefresh")
+else:
+    # Fallback when streamlit-autorefresh is unavailable in the runtime env.
+    time.sleep(REFRESH_SECONDS)
+    st.rerun()
