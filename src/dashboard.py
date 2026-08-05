@@ -102,6 +102,24 @@ def load_last_git_sync_status() -> str:
                     last_line = line.strip()
         if not last_line:
             return "Last Git Sync: sync log is empty"
+
+        # Expected format: "[YYYY-mm-dd HH:MM:SS TZ] message"
+        if last_line.startswith("[") and "]" in last_line:
+            ts_end = last_line.find("]")
+            timestamp = last_line[1:ts_end].strip()
+            message = last_line[ts_end + 1 :].strip()
+
+            if message.startswith("Pushed"):
+                status = "Success"
+            elif "No monitor_log.csv changes" in message:
+                status = "No changes"
+            elif "Push skipped" in message or "Git push failed" in message:
+                status = "Warning"
+            else:
+                status = "Info"
+
+            return f"Last Git Sync: {timestamp} ({status})"
+
         return f"Last Git Sync: {last_line}"
     except Exception as e:
         return f"Last Git Sync: could not read sync log ({e})"
