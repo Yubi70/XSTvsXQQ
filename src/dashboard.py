@@ -934,11 +934,98 @@ def render_theory_tab() -> None:
     else:
         st.info("strategy_vs_50_50.csv not found.")
 
+
+def _windowed_by_years(df: pd.DataFrame, years: int) -> pd.DataFrame:
+    cutoff = df["Date"].max() - pd.DateOffset(years=years)
+    return df[df["Date"] >= cutoff].copy().reset_index(drop=True)
+
+
+def _asymmetric_strategy_return(df: pd.DataFrame) -> tuple[float, int]:
+    start_xst = float(df["Price_XST"].iloc[0])
+    end_xst = float(df["Price_XST"].iloc[-1])
+    end_xqq = float(df["Price_XQQ"].iloc[-1])
+
+    holding = "XST"
+    units = 1.0 / start_xst
+    switches = 0
+
+    for _, row in df.iterrows():
+        delta = float(row["Delta %"])
+        pxst = float(row["Price_XST"])
+        pxqq = float(row["Price_XQQ"])
+
+        if delta >= SWITCH_UP_THRESHOLD and holding == "XST":
+            units = (units * pxst) / pxqq
+            holding = "XQQ"
+            switches += 1
+        elif delta <= -SWITCH_DOWN_THRESHOLD and holding == "XQQ":
+            units = (units * pxqq) / pxst
+            holding = "XST"
+            switches += 1
+
+    final_value = units * (end_xst if holding == "XST" else end_xqq)
+    return (final_value - 1.0) * 100.0, switches
+
+
+def _always_hold_return(df: pd.DataFrame, price_col: str) -> float:
+    start_price = float(df[price_col].iloc[0])
+    end_price = float(df[price_col].iloc[-1])
+    return (end_price / start_price - 1.0) * 100.0
+
+
+def _passive_5050_return(df: pd.DataFrame) -> float:
+    hold_xst = _always_hold_return(df, "Price_XST")
+    hold_xqq = _always_hold_return(df, "Price_XQQ")
+    return (0.5 * (1.0 + hold_xst / 100.0) + 0.5 * (1.0 + hold_xqq / 100.0) - 1.0) * 100.0
+
+
+@st.cache_data(ttl=3600)
+def build_asymmetric_comparison_table() -> pd.DataFrame:
+    hist = load_historical_delta()
+    rows = []
+
+    for label, years in (("Last 2 years", 2), ("Last 5 years", 5)):
+        w = _windowed_by_years(hist, years)
+        strategy_ret, switches = _asymmetric_strategy_return(w)
+        hold_xst = _always_hold_return(w, "Price_XST")
+        hold_xqq = _always_hold_return(w, "Price_XQQ")
+        hold_5050 = _passive_5050_return(w)
+        rows.append(
+            {
+                "Window": label,
+                "Thresholds": "+11.5% / -7.0%",
+                "Real switches": switches,
+                "Asymmetric strategy %": strategy_ret,
+                "Always XST %": hold_xst,
+                "Always XQQ %": hold_xqq,
+                "50/50 %": hold_5050,
+                "Edge vs 50/50 (pp)": strategy_ret - hold_5050,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
 def render_asymmetric_tab() -> None:
     st.subheader("Historical Asymmetric Theory")
     st.caption(
         "Directional thresholds: switch to XQQ at +11.5% delta, "
         "switch to XST at -7.0% delta."
+    )
+
+    st.markdown("#### Performance Comparison")
+    comp = build_asymmetric_comparison_table()
+    st.dataframe(
+        comp.style.format(
+            {
+                "Asymmetric strategy %": "{:.2f}%",
+                "Always XST %": "{:.2f}%",
+                "Always XQQ %": "{:.2f}%",
+                "50/50 %": "{:.2f}%",
+                "Edge vs 50/50 (pp)": "{:+.2f} pp",
+            }
+        ),
+        hide_index=True,
+        use_container_width=True,
     )
 
     a_tbl1, a_tbl2 = st.columns(2)

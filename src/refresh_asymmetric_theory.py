@@ -282,15 +282,23 @@ def passive_5050_return(df: pd.DataFrame) -> float:
     return (final_value - 1.0) * 100.0
 
 
+def always_hold_return(df: pd.DataFrame, price_col: str) -> float:
+    start_price = float(df[price_col].iloc[0])
+    end_price = float(df[price_col].iloc[-1])
+    return (end_price / start_price - 1.0) * 100.0
+
+
 def add_metrics_table(doc: Document, data_rows: list[dict]) -> None:
-    table = doc.add_table(rows=1, cols=6)
+    table = doc.add_table(rows=1, cols=8)
     hdr = table.rows[0].cells
     hdr[0].text = "Window"
     hdr[1].text = "Thresholds"
     hdr[2].text = "Real switches"
-    hdr[3].text = "Strategy return %"
-    hdr[4].text = "50/50 return %"
-    hdr[5].text = "Diff vs 50/50 (pp)"
+    hdr[3].text = "Asymmetric strategy %"
+    hdr[4].text = "Always XST %"
+    hdr[5].text = "Always XQQ %"
+    hdr[6].text = "50/50 %"
+    hdr[7].text = "Edge vs 50/50 (pp)"
 
     for row in data_rows:
         cells = table.add_row().cells
@@ -298,8 +306,10 @@ def add_metrics_table(doc: Document, data_rows: list[dict]) -> None:
         cells[1].text = row["thresholds"]
         cells[2].text = str(row["switches"])
         cells[3].text = f"{row['strategy']:.2f}%"
-        cells[4].text = f"{row['passive']:.2f}%"
-        cells[5].text = f"{row['edge']:+.2f}"
+        cells[4].text = f"{row['hold_xst']:.2f}%"
+        cells[5].text = f"{row['hold_xqq']:.2f}%"
+        cells[6].text = f"{row['passive']:.2f}%"
+        cells[7].text = f"{row['edge']:+.2f}"
 
 
 def build_docx(df2: pd.DataFrame, df5: pd.DataFrame) -> None:
@@ -313,6 +323,8 @@ def build_docx(df2: pd.DataFrame, df5: pd.DataFrame) -> None:
     rows = []
     for label, frame in (("Last 2 years", df2), ("Last 5 years", df5)):
         strategy_ret, switches = strategy_return(frame)
+        hold_xst = always_hold_return(frame, "Price_XST")
+        hold_xqq = always_hold_return(frame, "Price_XQQ")
         passive_ret = passive_5050_return(frame)
         rows.append(
             {
@@ -320,6 +332,8 @@ def build_docx(df2: pd.DataFrame, df5: pd.DataFrame) -> None:
                 "thresholds": "+11.5% / -7.0%",
                 "switches": switches,
                 "strategy": strategy_ret,
+                "hold_xst": hold_xst,
+                "hold_xqq": hold_xqq,
                 "passive": passive_ret,
                 "edge": strategy_ret - passive_ret,
             }
