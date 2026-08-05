@@ -13,7 +13,7 @@ Every **30 minutes** during market hours, the monitor:
 1. Fetches the latest prices for **XST.TO** and **XQQ.TO** from Yahoo Finance
 2. Calculates the **delta** (% difference) using the average of both prices as denominator
 3. Logs the result to `src/monitor_log.csv`
-4. If the delta reaches the **5% threshold**, sends a **switch signal**
+4. If the delta reaches the directional thresholds, sends a **switch signal**
 
 Delta formula used by the monitor:
 
@@ -29,8 +29,8 @@ A signal is triggered when:
 
 | Signal | Condition |
 |---|---|
-| `XST HIGH vs XQQ` | XST is ≥ 5% higher than XQQ — consider selling XST, buying XQQ |
-| `XQQ HIGH vs XST` | XQQ is ≥ 5% higher than XST — consider selling XQQ, buying XST |
+| `XST HIGH vs XQQ` | Delta is ≥ +11.5% — consider selling XST, buying XQQ |
+| `XQQ HIGH vs XST` | Delta is ≤ -7.0% — consider selling XQQ, buying XST |
 
 When a signal fires you receive:
 - **Windows popup** — stays on screen until you click OK
@@ -76,7 +76,8 @@ LAST_SWITCH_COST_XQQ=59.9000               # Optional: your most recent XQQ buy 
 
 To change the signal threshold, edit `src/monitor.py`:
 ```python
-SIGNAL_THRESHOLD_PCT = 5.0  # trigger at 5% delta
+SWITCH_UP_THRESHOLD_PCT = 11.5   # XST -> XQQ
+SWITCH_DOWN_THRESHOLD_PCT = 7.0  # XQQ -> XST
 ```
 
 If cost values are provided, each check prints whether your current holding is **WINNING** or **LOSING**:
@@ -182,6 +183,8 @@ src/
   monitor_log.csv       — Rolling log of all price checks (auto-created)
   monitor_git_sync.log  — Log of all Git push attempts (auto-created)
   position_state.json   — Current holding mode, persisted across restarts
+  refresh_asymmetric_theory.py — Builds asymmetric theory CSV/PNG/DOCX artifacts
+  historical_asymmetric_theory.docx — Asymmetric theory report
   .monitor.lock         — Single-instance lock file (auto-managed, do not delete)
 .env                    — Credentials and recipients (never commit this file)
 requirements.txt        — Python dependencies
@@ -196,6 +199,11 @@ requirements.txt        — Python dependencies
 **Install dependencies:**
 ```
 pip install -r requirements.txt
+```
+
+**Build asymmetric theory artifacts (+11.5% / -7.0%):**
+```
+python src/refresh_asymmetric_theory.py
 ```
 
 **Run manually:**

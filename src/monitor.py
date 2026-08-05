@@ -28,7 +28,8 @@ ALERT_RECIPIENTS = [r.strip() for r in os.getenv("ALERT_RECIPIENT", "").split(",
 TICKERS = ["XST.TO", "XQQ.TO"]
 LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_log.csv")
 LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]
-SIGNAL_THRESHOLD_PCT = 5.0  # flag when |delta %| >= this value
+SWITCH_UP_THRESHOLD_PCT = 11.5    # XST -> XQQ when delta >= +11.5%
+SWITCH_DOWN_THRESHOLD_PCT = 7.0   # XQQ -> XST when delta <= -7.0%
 STATE_PATH = os.path.join(os.path.dirname(__file__), "position_state.json")
 VALID_HOLDINGS = {"XST", "XQQ"}
 DEFAULT_HOLDING = os.getenv("START_HOLDING", "XQQ").strip().upper()
@@ -267,8 +268,8 @@ def compute_delta(prices: dict[str, float]) -> dict:
     if avg_price == 0:
         return {"Price_XST": xst, "Price_XQQ": xqq, "Delta_$": delta_abs, "Delta_%": None, "Signal": "DATA ERROR"}
     delta_pct = round(((xst - xqq) / avg_price) * 100, 1)
-    signal = "XST HIGH vs XQQ" if delta_pct >= SIGNAL_THRESHOLD_PCT else \
-             "XQQ HIGH vs XST" if delta_pct <= -SIGNAL_THRESHOLD_PCT else ""
+    signal = "XST HIGH vs XQQ" if delta_pct >= SWITCH_UP_THRESHOLD_PCT else \
+             "XQQ HIGH vs XST" if delta_pct <= -SWITCH_DOWN_THRESHOLD_PCT else ""
     return {
         "Price_XST": xst,
         "Price_XQQ": xqq,

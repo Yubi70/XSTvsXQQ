@@ -21,7 +21,8 @@ except ImportError:
 LOG_PATH = Path(__file__).parent / "monitor_log.csv"
 GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
 STATE_PATH = Path(__file__).parent / "position_state.json"
-SIGNAL_THRESHOLD = 5.0
+SWITCH_UP_THRESHOLD = 11.5
+SWITCH_DOWN_THRESHOLD = 7.0
 REFRESH_SECONDS = 30
 DEFAULT_SWITCH_INPUTS = {
     "holding": "XST",
@@ -313,10 +314,10 @@ def render_live_monitor_tab() -> None:
         line=dict(color="#1f77b4", width=1.8),
         marker=dict(size=3),
     ))
-    fig.add_hline(y=SIGNAL_THRESHOLD, line_dash="dash", line_color="red",
-                  annotation_text=f"+{SIGNAL_THRESHOLD}% threshold")
-    fig.add_hline(y=-SIGNAL_THRESHOLD, line_dash="dash", line_color="red",
-                  annotation_text=f"-{SIGNAL_THRESHOLD}% threshold")
+    fig.add_hline(y=SWITCH_UP_THRESHOLD, line_dash="dash", line_color="red",
+                  annotation_text=f"+{SWITCH_UP_THRESHOLD}% -> switch to XQQ")
+    fig.add_hline(y=-SWITCH_DOWN_THRESHOLD, line_dash="dash", line_color="green",
+                  annotation_text=f"-{SWITCH_DOWN_THRESHOLD}% -> switch to XST")
     fig.add_hline(y=0, line_color="gray", line_width=0.8)
     fig.update_layout(
         height=420,
@@ -598,6 +599,14 @@ IMG_SW_SIGNALS_2Y      = SRC_PATH / "switch_signals_last2y_3pct_5pct.png"
 IMG_SW_DURATION        = SRC_PATH / "switch_duration_graph.png"
 IMG_REAL_SW_5Y         = SRC_PATH / "real_switches_last5y_3pct_5pct.png"
 IMG_REAL_SW_2Y         = SRC_PATH / "real_switches_last2y_3pct_5pct.png"
+ASYM_REAL_SW_5Y_PATH   = SRC_PATH / "real_switches_asym_last5y.csv"
+ASYM_REAL_SW_2Y_PATH   = SRC_PATH / "real_switches_asym_last2y.csv"
+ASYM_DOCX_PATH         = SRC_PATH / "historical_asymmetric_theory.docx"
+IMG_ASYM_SW_SIGNALS_5Y = SRC_PATH / "switch_signals_asym_last5y.png"
+IMG_ASYM_SW_SIGNALS_2Y = SRC_PATH / "switch_signals_asym_last2y.png"
+IMG_ASYM_REAL_SW_5Y    = SRC_PATH / "real_switches_asym_last5y.png"
+IMG_ASYM_REAL_SW_2Y    = SRC_PATH / "real_switches_asym_last2y.png"
+IMG_ASYM_SW_DURATION   = SRC_PATH / "switch_duration_asym_last5y.png"
 
 
 @st.cache_data(ttl=3600)
@@ -606,7 +615,9 @@ def load_historical_delta() -> pd.DataFrame:
     Compute signed symmetric delta from the raw historical price CSVs using the
     same formula as the live monitor:
         Delta % = ((XST - XQQ) / ((XST + XQQ) / 2)) * 100
-    Signals are flagged at |delta| >= 5%, split by direction.
+        Signals are flagged using directional thresholds:
+            - XST HIGH vs XQQ when delta >= +11.5%
+            - XQQ HIGH vs XST when delta <= -7.0%
     Switch events are identified as the first day a new threshold is crossed after
     having been below it (i.e. actual switch trigger, not every signal day).
     """
@@ -620,7 +631,9 @@ def load_historical_delta() -> pd.DataFrame:
     avg = (merged["Price_XST"] + merged["Price_XQQ"]) / 2
     merged["Delta %"] = ((merged["Price_XST"] - merged["Price_XQQ"]) / avg) * 100
     merged["Signal"] = merged["Delta %"].apply(
-        lambda x: "XST HIGH vs XQQ" if x >= 5.0 else ("XQQ HIGH vs XST" if x <= -5.0 else None)
+        lambda x: "XST HIGH vs XQQ" if x >= SWITCH_UP_THRESHOLD else (
+            "XQQ HIGH vs XST" if x <= -SWITCH_DOWN_THRESHOLD else None
+        )
     )
     # Track holding state: only fire a switch when the held stock needs to change.
     # Starting assumption: holding XST (first historical position).
@@ -654,9 +667,9 @@ def render_theory_tab() -> None:
     st.markdown(
         """
         **Strategy logic:** XST (Staples) and XQQ (NASDAQ 100 Hedged) are both Canadian ETFs that tend to
-        mean-revert relative to each other. When one pulls ahead by **≥ 5%** (measured as a symmetric
-        percentage of their average price), the lagging ETF is historically likely to catch up — making
-        it advantageous to switch into it.
+        mean-revert relative to each other. This monitor uses directional triggers:
+        **+11.5%** for switching **XST -> XQQ** and **-7.0%** for switching **XQQ -> XST**
+        (measured with a symmetric percentage of their average price).
 
         The charts below use ~14 years of daily closing prices to validate this thesis.
         """
@@ -665,7 +678,7 @@ def render_theory_tab() -> None:
     st.divider()
 
     # ── 1. Historical delta over time ─────────────────────────────────────────
-    st.markdown("#### Historical Delta % over Time (symmetric formula, ±5% threshold)")
+    st.markdown("#### Historical Delta % over Time (symmetric formula, +11.5% / -7.0% thresholds)")
     if XST_HIST_PATH.exists() and XQQ_HIST_PATH.exists():
         dsig = load_historical_delta()
         sw_rows = dsig[dsig["SwitchEvent"]].copy()
@@ -697,9 +710,19 @@ def render_theory_tab() -> None:
             line=dict(color="#1f77b4", width=1.4),
         ))
 
-        # ±5% threshold lines
-        fig.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% → switch to XQQ")
-        fig.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
+        # Directional threshold lines
+        fig.add_hline(
+            y=SWITCH_UP_THRESHOLD,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"+{SWITCH_UP_THRESHOLD}% -> switch to XQQ",
+        )
+        fig.add_hline(
+            y=-SWITCH_DOWN_THRESHOLD,
+            line_dash="dash",
+            line_color="green",
+            annotation_text=f"-{SWITCH_DOWN_THRESHOLD}% -> switch to XST",
+        )
         fig.add_hline(y=0,  line_dash="dot",  line_color="gray")
 
         # Switch trigger markers
@@ -774,8 +797,18 @@ def render_theory_tab() -> None:
             mode="lines", name="Delta %",
             line=dict(color="#1f77b4", width=1.4),
         ))
-        fig5.add_hline(y=5,  line_dash="dash", line_color="red",   annotation_text="+5% → switch to XQQ")
-        fig5.add_hline(y=-5, line_dash="dash", line_color="green", annotation_text="−5% → switch to XST")
+        fig5.add_hline(
+            y=SWITCH_UP_THRESHOLD,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"+{SWITCH_UP_THRESHOLD}% -> switch to XQQ",
+        )
+        fig5.add_hline(
+            y=-SWITCH_DOWN_THRESHOLD,
+            line_dash="dash",
+            line_color="green",
+            annotation_text=f"-{SWITCH_DOWN_THRESHOLD}% -> switch to XST",
+        )
         fig5.add_hline(y=0,  line_dash="dot",  line_color="gray")
 
         xst5 = sw5[sw5["SwitchTo"] == "XQQ"]
@@ -901,6 +934,72 @@ def render_theory_tab() -> None:
     else:
         st.info("strategy_vs_50_50.csv not found.")
 
+def render_asymmetric_tab() -> None:
+    st.subheader("Historical Asymmetric Theory")
+    st.caption(
+        "Directional thresholds: switch to XQQ at +11.5% delta, "
+        "switch to XST at -7.0% delta."
+    )
+
+    a_tbl1, a_tbl2 = st.columns(2)
+    for col, path, label in [
+        (a_tbl1, ASYM_REAL_SW_5Y_PATH, "Asymmetric real switches - last 5 years"),
+        (a_tbl2, ASYM_REAL_SW_2Y_PATH, "Asymmetric real switches - last 2 years"),
+    ]:
+        if path.exists():
+            col.markdown(f"**{label}**")
+            col.dataframe(load_csv(path), hide_index=True, use_container_width=True)
+        else:
+            col.info(f"Missing file: {path.name}")
+
+    st.divider()
+    a_img1, a_img2 = st.columns(2)
+    if IMG_ASYM_SW_SIGNALS_5Y.exists():
+        a_img1.image(
+            str(IMG_ASYM_SW_SIGNALS_5Y),
+            caption="Asymmetric switch signals - last 5 years",
+            use_container_width=True,
+        )
+    if IMG_ASYM_SW_SIGNALS_2Y.exists():
+        a_img2.image(
+            str(IMG_ASYM_SW_SIGNALS_2Y),
+            caption="Asymmetric switch signals - last 2 years",
+            use_container_width=True,
+        )
+
+    a_img3, a_img4 = st.columns(2)
+    if IMG_ASYM_REAL_SW_5Y.exists():
+        a_img3.image(
+            str(IMG_ASYM_REAL_SW_5Y),
+            caption="Asymmetric real-switch premiums - last 5 years",
+            use_container_width=True,
+        )
+    if IMG_ASYM_REAL_SW_2Y.exists():
+        a_img4.image(
+            str(IMG_ASYM_REAL_SW_2Y),
+            caption="Asymmetric real-switch premiums - last 2 years",
+            use_container_width=True,
+        )
+
+    if IMG_ASYM_SW_DURATION.exists():
+        st.image(
+            str(IMG_ASYM_SW_DURATION),
+            caption="Asymmetric switch duration - last 5 years",
+            use_container_width=True,
+        )
+
+    st.divider()
+    if ASYM_DOCX_PATH.exists():
+        with open(ASYM_DOCX_PATH, "rb") as f:
+            st.download_button(
+                label="Download Historical Asymmetric Theory (DOCX)",
+                data=f,
+                file_name=ASYM_DOCX_PATH.name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+    else:
+        st.info("Asymmetric theory DOCX not found.")
+
 
 def render_docs_tab() -> None:
     if not DOCS_PATH.exists():
@@ -910,8 +1009,14 @@ def render_docs_tab() -> None:
     st.markdown(content)
 
 
-tab_live, tab_since_switch, tab_theory, tab_docs = st.tabs(
-    ["Live Monitor", "Since Last Switch", "The Historical Theory", "Documentation"]
+tab_live, tab_since_switch, tab_theory, tab_asym, tab_docs = st.tabs(
+    [
+        "Live Monitor",
+        "Since Last Switch",
+        "The Historical Theory",
+        "Historical Asymmetric Theory",
+        "Documentation",
+    ]
 )
 with tab_live:
     render_live_monitor_tab()
@@ -921,6 +1026,9 @@ with tab_since_switch:
 
 with tab_theory:
     render_theory_tab()
+
+with tab_asym:
+    render_asymmetric_tab()
 
 with tab_docs:
     render_docs_tab()
