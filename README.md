@@ -9,7 +9,10 @@ This project provides tools and analysis for comparing XST and XQQ datasets or s
 ## Setup
 1. Install dependencies: `pip install -r requirements.txt`
 2. Run analysis scripts from the `src` folder.
-3. Run dashboard: `streamlit run src/dashboard.py`
+3. Run dashboard locally: `streamlit run app.py`
+
+## Streamlit Cloud
+This repository now includes a root entrypoint at `app.py` (and `streamlit_app.py`) so Streamlit Cloud can discover the app without needing to target `src/dashboard.py` manually.
 
 ## Streamlit Auto-Update
 The project includes `.streamlit/config.toml` with `runOnSave = true`.

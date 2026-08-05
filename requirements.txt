@@ -2,7 +2,7 @@ pandas
 matplotlib
 yfinance
 schedule
-winotify
+winotify; platform_system == "Windows"
 pytz
 python-dotenv
 streamlit
