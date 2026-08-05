@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 LOG_PATH = Path(__file__).parent / "monitor_log.csv"
 GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
@@ -57,8 +58,21 @@ def set_query_param(key: str, value: str) -> None:
 
 @st.cache_data(ttl=REFRESH_SECONDS)
 def load_log() -> pd.DataFrame:
+    expected_columns = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]
+
+    if not LOG_PATH.exists():
+        return pd.DataFrame(columns=expected_columns)
+
     # Skip malformed rows so one bad write never crashes the dashboard.
-    df = pd.read_csv(LOG_PATH, encoding="utf-8-sig", on_bad_lines="skip")
+    try:
+        df = pd.read_csv(LOG_PATH, encoding="utf-8-sig", on_bad_lines="skip")
+    except Exception:
+        return pd.DataFrame(columns=expected_columns)
+
+    missing_columns = [column for column in expected_columns if column not in df.columns]
+    if missing_columns:
+        return pd.DataFrame(columns=expected_columns)
+
     df["Price_XST"] = pd.to_numeric(df["Price_XST"], errors="coerce")
     df["Price_XQQ"] = pd.to_numeric(df["Price_XQQ"], errors="coerce")
     df["Delta_$"] = pd.to_numeric(df["Delta_$"], errors="coerce")
@@ -910,5 +924,4 @@ with tab_docs:
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────────
 st.caption(f"Auto-refreshes every {REFRESH_SECONDS}s")
-time.sleep(REFRESH_SECONDS)
-st.rerun()
+st_autorefresh(interval=REFRESH_SECONDS * 1000, key="dashboard_autorefresh")

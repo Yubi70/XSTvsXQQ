@@ -6,4 +6,5 @@ winotify; platform_system == "Windows"
 pytz
 python-dotenv
 streamlit
+streamlit-autorefresh
 plotly
