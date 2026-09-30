@@ -32,6 +32,7 @@ LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Sign
 SWITCH_UP_THRESHOLD_PCT = 11.5    # XST -> XQQ when delta >= +11.5%
 SWITCH_DOWN_THRESHOLD_PCT = 7.0   # XQQ -> XST when delta <= -7.0%
 STATE_PATH = os.path.join(os.path.dirname(__file__), "position_state.json")
+HOLDING_PATH = os.path.join(os.path.dirname(__file__), "monitor_holding.json")
 VALID_HOLDINGS = {"XST", "XQQ"}
 DEFAULT_HOLDING = os.getenv("START_HOLDING", "XQQ").strip().upper()
 
@@ -96,6 +97,12 @@ def _normalize_cost_basis(raw_cost_basis: dict | None) -> dict[str, float | None
 def load_state() -> dict:
     default_state = _default_state()
     if not os.path.isfile(STATE_PATH):
+        if os.getenv("GITHUB_ACTIONS") and os.path.isfile(HOLDING_PATH):
+            try:
+                with open(HOLDING_PATH, "r", encoding="utf-8") as f:
+                    default_state["holding"] = normalize_holding(json.load(f).get("holding"))
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
         save_state(default_state)
         return default_state
     try:
@@ -127,6 +134,9 @@ def save_state(state: dict) -> None:
     }
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=True, indent=2)
+    if os.getenv("GITHUB_ACTIONS"):
+        with open(HOLDING_PATH, "w", encoding="utf-8") as f:
+            json.dump({"holding": payload["holding"]}, f, ensure_ascii=True, indent=2)
 
 
 def load_holding_state() -> str:

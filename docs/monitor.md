@@ -45,6 +45,8 @@ The monitor now tracks which ETF you currently hold and only alerts for the oppo
 
 After an actionable alert is triggered, the holding mode auto-flips for the next cycle.
 State is stored in `src/position_state.json`.
+In GitHub Actions, only the holding direction is committed in `src/monitor_holding.json`;
+the local state file (including optional cost basis) remains ignored by Git.
 
 ---
 
