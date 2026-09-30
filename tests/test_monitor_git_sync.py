@@ -1,4 +1,7 @@
 import unittest
+import json
+import os
+import tempfile
 from unittest.mock import patch
 
 import pandas as pd
@@ -7,6 +10,25 @@ from src import monitor
 
 
 class TestMonitorGitSync(unittest.TestCase):
+    def test_actions_restores_holding_without_committing_cost_basis(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = os.path.join(directory, "position_state.json")
+            holding_path = os.path.join(directory, "monitor_holding.json")
+            with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), \
+                    patch.object(monitor, "STATE_PATH", state_path), \
+                    patch.object(monitor, "HOLDING_PATH", holding_path), \
+                    patch.object(monitor, "ENV_COST_XST", 62.15):
+                monitor.save_state({"holding": "XST", "cost_basis": {"XST": 62.15, "XQQ": 74.18}})
+                with open(holding_path, encoding="utf-8") as f:
+                    self.assertEqual(json.load(f), {"holding": "XST"})
+
+                os.remove(state_path)
+                restored = monitor.load_state()
+                self.assertEqual(restored["holding"], "XST")
+                self.assertEqual(restored["cost_basis"]["XST"], 62.15)
+                with open(holding_path, encoding="utf-8") as f:
+                    self.assertEqual(json.load(f), {"holding": "XST"})
+
     @patch("src.monitor.subprocess.run")
     def test_get_changed_sync_paths_includes_state_and_log(self, mock_run):
         mock_run.return_value.stdout = (

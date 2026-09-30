@@ -42,8 +42,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain src/monitor_log.csv src/position_state.json)" ]; then
-            git add src/monitor_log.csv src/position_state.json
+          if [ -n "$(git status --porcelain src/monitor_log.csv src/monitor_holding.json)" ]; then
+            git add src/monitor_log.csv src/monitor_holding.json
             git commit -m "chore: update monitor log [skip ci]"
             git push
           else
