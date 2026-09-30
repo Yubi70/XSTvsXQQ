@@ -1,0 +1,51 @@
+name: Price Monitor
+
+on:
+  schedule:
+    # Every 30 min, 13:00-21:00 UTC, Mon-Fri — covers 9:30-16:00 ET across both
+    # EDT and EST. monitor.py itself gates on America/Toronto market hours, so
+    # runs outside the real trading window are safe no-ops.
+    - cron: "*/30 13-21 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: price-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run price check
+        env:
+          SMTP_SENDER: ${{ secrets.SMTP_SENDER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
+          START_HOLDING: ${{ secrets.START_HOLDING }}
+          LAST_SWITCH_COST_XST: ${{ secrets.LAST_SWITCH_COST_XST }}
+          LAST_SWITCH_COST_XQQ: ${{ secrets.LAST_SWITCH_COST_XQQ }}
+        run: python src/monitor.py --once
+
+      - name: Commit and push updated logs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain src/monitor_log.csv src/position_state.json)" ]; then
+            git add src/monitor_log.csv src/position_state.json
+            git commit -m "chore: update monitor log [skip ci]"
+            git push
+          else
+            echo "No changes to commit."
+          fi

@@ -13,6 +13,7 @@ import time
 import atexit
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
+import pandas as pd
 import yfinance as yf
 import ctypes
 import threading
@@ -246,16 +247,77 @@ def is_within_collection_window() -> bool:
 
 
 def fetch_prices() -> dict[str, float]:
-    data = yf.download(TICKERS, period="1d", interval="1m", progress=False, auto_adjust=True)
-    prices: dict[str, float] = {}
-    for ticker in TICKERS:
+    prices: dict[str, float | None] = {ticker: None for ticker in TICKERS}
+    for attempt in range(3):
         try:
-            price = float(data["Close"][ticker].dropna().iloc[-1])
-            prices[ticker] = round(price, 4)
+            data = yf.download(TICKERS, period="1d", interval="1m", progress=False, auto_adjust=True)
+            if data is None or getattr(data, "empty", False):
+                raise ValueError("Yahoo returned an empty price table")
+
+            close_sources = []
+            if isinstance(data, dict):
+                maybe_close = data.get("Close")
+                if maybe_close is not None:
+                    close_sources.append(maybe_close)
+            else:
+                if hasattr(data, "columns") and "Close" in data.columns:
+                    close_sources.append(data["Close"])
+                elif hasattr(data, "columns"):
+                    close_sources.append(data)
+
+            if not close_sources:
+                raise ValueError("Yahoo returned a response without a Close frame")
+
+            updated_any = False
+            for ticker in TICKERS:
+                for close_source in close_sources:
+                    try:
+                        series = None
+                        if isinstance(close_source, pd.DataFrame):
+                            if ticker in close_source.columns:
+                                series = close_source[ticker]
+                            else:
+                                for col in close_source.columns:
+                                    if isinstance(col, tuple) and col[-1] == ticker:
+                                        series = close_source[col]
+                                        break
+                        elif isinstance(close_source, pd.Series):
+                            if close_source.name == ticker:
+                                series = close_source
+                            elif close_source.name in (None, "Close"):
+                                series = close_source
+
+                        if series is None:
+                            continue
+
+                        valid = pd.to_numeric(series, errors="coerce").dropna()
+                        if valid.empty:
+                            continue
+
+                        prices[ticker] = round(float(valid.iloc[-1]), 4)
+                        updated_any = True
+                        break
+                    except Exception:
+                        continue
+
+                if prices.get(ticker) is None:
+                    print(f"  [WARN] Could not fetch {ticker}: no valid close value in response")
+
+            if all(prices.get(ticker) is not None for ticker in TICKERS):
+                return {ticker: float(value) for ticker, value in prices.items()}
+            if attempt < 2 and updated_any:
+                print(f"  [WARN] Partial Yahoo price payload on attempt {attempt + 1}; retrying...")
+                continue
+            if attempt < 2:
+                print(f"  [WARN] Yahoo download failed on attempt {attempt + 1}; retrying...")
+                continue
+            return {ticker: float(value) if value is not None else None for ticker, value in prices.items()}
         except Exception as e:
-            print(f"  [WARN] Could not fetch {ticker}: {e}")
-            prices[ticker] = None
-    return prices
+            print(f"  [WARN] Yahoo download failed on attempt {attempt + 1}: {e}")
+            if attempt == 2:
+                return {ticker: None for ticker in TICKERS}
+
+    return {ticker: float(value) if value is not None else None for ticker, value in prices.items()}
 
 
 def compute_delta(prices: dict[str, float]) -> dict:
@@ -290,6 +352,7 @@ def write_log(row: dict) -> None:
 
 REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
 GIT_SYNC_LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_git_sync.log")
+SYNC_PATHS = ["src/monitor_log.csv", "src/position_state.json"]
 
 
 def _append_git_sync_log(message: str) -> None:
@@ -298,31 +361,48 @@ def _append_git_sync_log(message: str) -> None:
         f.write(f"[{ts}] {message}\n")
 
 
+def get_changed_sync_paths() -> list[str]:
+    """Return the repo paths that changed and should be synced to Git."""
+    import os as _os
+    git_env = {**_os.environ, "GCM_CREDENTIAL_STORE": "dpapi", "GIT_TERMINAL_PROMPT": "0"}
+    status = subprocess.run(
+        ["git", "-C", REPO_ROOT, "status", "--porcelain", "--untracked-files=all", *SYNC_PATHS],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=git_env,
+    )
+
+    changed: list[str] = []
+    for line in status.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip()
+        if path in SYNC_PATHS:
+            changed.append(path)
+    return sorted(set(changed))
+
+
 def git_push_log() -> None:
-    """Commit and push the updated monitor_log.csv to GitHub."""
+    """Commit and push the monitor log and current state to GitHub when either changed."""
     import os as _os
     _git_env = {**_os.environ, "GCM_CREDENTIAL_STORE": "dpapi", "GIT_TERMINAL_PROMPT": "0"}
     try:
-        status = subprocess.run(
-            ["git", "-C", REPO_ROOT, "status", "--porcelain", "src/monitor_log.csv"],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=_git_env,
-        )
-        if not status.stdout.strip():
-            _append_git_sync_log("No monitor_log.csv changes to push.")
+        changed_paths = get_changed_sync_paths()
+        if not changed_paths:
+            _append_git_sync_log("No monitor_log.csv or position_state.json changes to push.")
             return
 
         subprocess.run(
-            ["git", "-C", REPO_ROOT, "add", "src/monitor_log.csv"],
+            ["git", "-C", REPO_ROOT, "add", *changed_paths],
             capture_output=True,
             text=True,
             check=True,
             env=_git_env,
         )
+        commit_message = "chore: update monitor state"
         commit = subprocess.run(
-            ["git", "-C", REPO_ROOT, "commit", "-m", "chore: update monitor_log.csv"],
+            ["git", "-C", REPO_ROOT, "commit", "-m", commit_message],
             capture_output=True,
             text=True,
             env=_git_env,
@@ -337,8 +417,8 @@ def git_push_log() -> None:
             check=True,
             env=_git_env,
         )
-        _append_git_sync_log("Pushed monitor_log.csv to origin/main.")
-        print("  monitor_log.csv pushed to GitHub.")
+        _append_git_sync_log(f"Pushed {', '.join(changed_paths)} to origin/main.")
+        print(f"  {'; '.join(changed_paths)} pushed to GitHub.")
     except subprocess.CalledProcessError as e:
         details = (e.stderr or e.stdout or str(e)).strip()
         _append_git_sync_log(f"Git sync failed: {details}")
@@ -409,7 +489,9 @@ def run_check() -> None:
     result["Signal"] = filter_actionable_signal(raw_signal, holding)
     row = {"Timestamp": ts, **result}
     write_log(row)
-    threading.Thread(target=git_push_log, daemon=True).start()
+    # In GitHub Actions the workflow itself commits/pushes via GITHUB_TOKEN.
+    if not os.getenv("GITHUB_ACTIONS"):
+        threading.Thread(target=git_push_log, daemon=True).start()
 
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
@@ -474,8 +556,19 @@ def main() -> None:
         time.sleep(30)
 
 
+def run_once() -> None:
+    """Single-shot entrypoint for remote schedulers (e.g. GitHub Actions cron)."""
+    print("=== XST vs XQQ Price Monitor (single check) ===")
+    run_check()
+
+
 if __name__ == "__main__":
+    import sys
+
     try:
-        main()
+        if "--once" in sys.argv:
+            run_once()
+        else:
+            main()
     except KeyboardInterrupt:
         print("\nMonitor stopped manually.")

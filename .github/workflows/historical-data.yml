@@ -1,0 +1,52 @@
+name: Refresh Historical Price Data
+
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: historical-price-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh price history and derived data
+        run: python -m src.refresh_price_history
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            "src/XST Historical Data (1).csv" \
+            "src/XQQ Historical Data (1).csv" \
+            src/delta_signals.csv \
+            src/real_switches_asym_last5y.csv \
+            src/real_switches_asym_last2y.csv \
+            src/switch_signals_asym_last5y.png \
+            src/switch_signals_asym_last2y.png \
+            src/real_switches_asym_last5y.png \
+            src/real_switches_asym_last2y.png \
+            src/switch_duration_asym_last5y.png \
+            src/historical_asymmetric_theory.docx
+          if git diff --cached --quiet; then
+            echo "No updated data to commit."
+          else
+            git commit -m "chore: refresh historical price data [skip ci]"
+            git push
+          fi

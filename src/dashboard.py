@@ -627,7 +627,7 @@ IMG_ASYM_REAL_SW_2Y    = SRC_PATH / "real_switches_asym_last2y.png"
 IMG_ASYM_SW_DURATION   = SRC_PATH / "switch_duration_asym_last5y.png"
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=REFRESH_SECONDS)
 def load_historical_delta() -> pd.DataFrame:
     """
     Compute signed symmetric delta from the raw historical price CSVs using the
@@ -675,7 +675,7 @@ def load_historical_delta() -> pd.DataFrame:
     return merged
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=REFRESH_SECONDS)
 def load_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
@@ -997,7 +997,7 @@ def _passive_5050_return(df: pd.DataFrame) -> float:
     return (0.5 * (1.0 + hold_xst / 100.0) + 0.5 * (1.0 + hold_xqq / 100.0) - 1.0) * 100.0
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=REFRESH_SECONDS)
 def build_asymmetric_comparison_table() -> pd.DataFrame:
     hist = load_historical_delta()
     rows = []
