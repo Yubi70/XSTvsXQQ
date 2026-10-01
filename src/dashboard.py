@@ -1,6 +1,6 @@
 """
 dashboard.py — Streamlit live dashboard for the XST vs XQQ monitor.
-Reads monitor_log.csv and auto-refreshes every 30 seconds.
+Reads monitor_log.csv and auto-refreshes every 30 minutes.
 
 Run with:
     .venv/Scripts/streamlit run src/dashboard.py
@@ -23,7 +23,8 @@ GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
 STATE_PATH = Path(__file__).parent / "position_state.json"
 SWITCH_UP_THRESHOLD = 11.5
 SWITCH_DOWN_THRESHOLD = 7.0
-REFRESH_SECONDS = 30
+REFRESH_SECONDS = 30 * 60
+MARKET_TIMEZONE = "America/Toronto"
 DEFAULT_SWITCH_INPUTS = {
     "holding": "XST",
     "last_switch_date": "2026-04-24",
@@ -85,6 +86,9 @@ def load_log() -> pd.DataFrame:
     ts_text = df["Timestamp"].astype(str).str.replace(r"\s+[A-Z]{3}$", "", regex=True)
     df["Timestamp"] = pd.to_datetime(ts_text, utc=False, errors="coerce")
     df = df.dropna(subset=["Timestamp"])
+    # Never present a future-dated observation as the current market value.
+    now_market = pd.Timestamp.now(tz=MARKET_TIMEZONE).tz_localize(None)
+    df = df[df["Timestamp"] <= now_market]
     df = df.sort_values("Timestamp").drop_duplicates(subset=["Timestamp"], keep="last")
     return df
 

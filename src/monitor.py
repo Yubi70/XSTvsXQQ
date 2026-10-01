@@ -410,8 +410,16 @@ def git_push_log() -> None:
         if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr).lower():
             raise subprocess.CalledProcessError(commit.returncode, commit.args, commit.stdout, commit.stderr)
 
+        # Remote main may have advanced (e.g. historical-data workflow); rebase first.
         subprocess.run(
-            ["git", "-C", REPO_ROOT, "push", "origin", "main"],
+            ["git", "-C", REPO_ROOT, "pull", "--rebase", "origin", "main"],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=_git_env,
+        )
+        subprocess.run(
+            ["git", "-C", REPO_ROOT, "push", "origin", "HEAD:main"],
             capture_output=True,
             text=True,
             check=True,
@@ -522,6 +530,15 @@ def run_check() -> None:
     print(f"  Logged to {LOG_PATH}")
 
 
+def run_check_safely() -> None:
+    """Keep the recurring monitor alive when one scheduled check fails."""
+    try:
+        run_check()
+    except Exception as error:
+        now = datetime.now(MARKET_TZ)
+        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S %Z')}] Check failed; will retry: {error}")
+
+
 def main() -> None:
     if not acquire_single_instance_lock():
         print("Another monitor instance is already running. Exiting.")
@@ -539,13 +556,13 @@ def main() -> None:
     first_check_time = open_time + timedelta(minutes=FIRST_CHECK_DELAY_MINUTES)
 
     if is_market_open() and now >= first_check_time:
-        run_check()  # run immediately only if we are already past the opening delay
+        run_check_safely()  # run immediately only if we are already past the opening delay
     elif now.weekday() < 5 and open_time <= now < first_check_time:
         print(f"Waiting until {first_check_time.strftime('%H:%M ET')} for first validation of the day.")
 
     # Anchor checks to wall-clock minutes, e.g. 09:32, 10:02, 10:32...
-    schedule.every().hour.at(f":{CHECK_MINUTE_A:02d}").do(run_check)
-    schedule.every().hour.at(f":{CHECK_MINUTE_B:02d}").do(run_check)
+    schedule.every().hour.at(f":{CHECK_MINUTE_A:02d}").do(run_check_safely)
+    schedule.every().hour.at(f":{CHECK_MINUTE_B:02d}").do(run_check_safely)
 
     while True:
         now = datetime.now(MARKET_TZ)
