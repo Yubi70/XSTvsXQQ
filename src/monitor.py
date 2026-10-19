@@ -461,7 +461,11 @@ def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
         except Exception as e:
             print(f"  [WARN] Email failed: {e}")
 
-    threading.Thread(target=send, daemon=True).start()
+    if os.getenv("GITHUB_ACTIONS"):
+        # A one-shot process must finish sending before it exits.
+        send()
+    else:
+        threading.Thread(target=send, daemon=True).start()
 
 
 def send_notification(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
@@ -517,7 +521,8 @@ def run_check() -> None:
         print(f"  Threshold reached ({raw_signal}) but ignored because current holding is {holding}.")
     if result["Signal"]:
         print(f"  *** SIGNAL: {result['Signal']} ***")
-        send_notification(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
+        if os.name == "nt" and not os.getenv("GITHUB_ACTIONS"):
+            send_notification(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         new_holding = opposite_holding(holding)
         state["holding"] = new_holding

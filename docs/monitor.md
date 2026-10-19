@@ -9,7 +9,11 @@ the gap is large enough to warrant a portfolio switch.
 
 ## How It Works
 
-Every **30 minutes** during market hours, the monitor:
+The project uses **cloud-only operation**: Streamlit Cloud displays the data and
+the `Price Monitor` GitHub Actions workflow runs the collector. No local server
+or Windows scheduled monitor is required.
+
+Approximately every **30 minutes** during market hours, the workflow:
 1. Fetches the latest prices for **XST.TO** and **XQQ.TO** from Yahoo Finance
 2. Calculates the **delta** (% difference) using the average of both prices as denominator
 3. Logs the result to `src/monitor_log.csv`
@@ -32,9 +36,9 @@ A signal is triggered when:
 | `XST HIGH vs XQQ` | Delta is ≥ +11.5% — consider selling XST, buying XQQ |
 | `XQQ HIGH vs XST` | Delta is ≤ -7.0% — consider selling XQQ, buying XST |
 
-When a signal fires you receive:
-- **Windows popup** — stays on screen until you click OK
-- **Email alert** — sent to all configured recipients
+When a signal fires, an **email alert** is sent to all configured recipients.
+The one-shot cloud collector waits for the send attempt before exiting.
+Windows popups are only available when running the optional local monitor.
 
 ### Reverse-only mode (position-aware alerts)
 
@@ -52,18 +56,26 @@ State is stored in `src/position_state.json`.
 
 | Time (ET) | Action |
 |---|---|
-| **9:00 AM** Mon–Fri | Script auto-starts via Windows Task Scheduler |
-| **9:32 AM** | First price check runs (2-minute opening delay) |
-| Every **30 min** | Price check runs (e.g., 10:02, 10:32, 11:02...) |
-| **4:00 PM** | Market closed — regular checks skipped |
-| **4:02 PM** | Final close capture — one last price snapshot after close |
-| **4:30 PM** | Script shuts down automatically |
+| Mon–Fri, 13:00–21:30 UTC | GitHub Actions schedules checks every 30 minutes |
+| During market hours | Collector fetches prices; checks outside the collection window are skipped |
+| After each collection | Workflow commits the price log and position state to GitHub |
+
+GitHub Actions scheduled runs can be delayed; exact collection times are not
+guaranteed. The dashboard caches data and refreshes every 30 minutes, so
+`Last updated` shows the latest loaded observation, not the current time.
+The date filter only changes charts and table ranges, not that timestamp.
 
 ---
 
 ## Configuration
 
-All settings are stored in `.env` at the project root:
+For cloud operation, configure these **GitHub Actions repository secrets**:
+`SMTP_SENDER`, `SMTP_PASSWORD`, `ALERT_RECIPIENT`, `START_HOLDING`,
+`LAST_SWITCH_COST_XST`, and `LAST_SWITCH_COST_XQQ`. The last three seed missing
+state values; the committed `src/position_state.json` maintains the current
+holding and cost basis between runs. A local `.env` is not uploaded to Actions.
+
+For optional local development, the equivalent settings go in `.env`:
 
 ```
 SMTP_SENDER=hubert.smtp@gmail.com       # Gmail account used to send alerts
@@ -92,7 +104,11 @@ On an actionable switch, the monitor automatically updates the new holding's ent
 
 ## Git Auto-Sync
 
-After every price check the monitor automatically commits and pushes `monitor_log.csv` to the remote repository (`origin/main`).
+In cloud operation, the workflow commits and pushes `monitor_log.csv` and
+`position_state.json` to `origin/main` when either changes. Failures appear in
+the GitHub Actions run logs.
+
+The following behavior applies only to the optional local monitor:
 
 - Only runs if the file has actually changed since the last commit
 - Runs in a background thread so it never blocks the check cycle
@@ -119,6 +135,9 @@ The Streamlit dashboard (`src/dashboard.py`) now has three tabs:
     - `Approximate amount (CAD)`
   - Shows `Switch edge (%)` in percent (2 decimal places) and `Switch edge ($)` in CAD.
   - Always displays the date/hour of the latest price used per ticker (may differ outside market hours).
+  - Edits made in Streamlit Cloud are local to that deployed instance; they are
+    not committed to GitHub or sent to the Actions collector and may be lost on
+    redeployment. Change the repository's position state to persist collector inputs.
 
 3. **Documentation**
   - Renders this file (`docs/monitor.md`) as formatted Markdown directly in the web page.
@@ -195,6 +214,26 @@ requirements.txt        — Python dependencies
 ---
 
 ## Setup & Run
+
+### Cloud-only use
+
+Open the hosted Streamlit dashboard. Keep the `Price Monitor` workflow enabled
+and configure its email secrets. Do not launch a second local collector.
+
+On the Windows machine that previously ran the monitor, use an Administrator
+terminal to prevent duplicate collection:
+
+```powershell
+schtasks /change /tn "XSTvsXQQ_Monitor" /disable
+schtasks /end /tn "XSTvsXQQ_Monitor"
+```
+
+If the task is not running, the second command may report that there is no
+running instance. Stop any manually launched monitor with Ctrl+C as well.
+
+### Optional local development
+
+The commands below are retained for development, not normal cloud operation.
 
 **Install dependencies:**
 ```
