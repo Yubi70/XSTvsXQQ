@@ -1,26 +1,21 @@
 """
 dashboard.py — Streamlit live dashboard for the XST vs XQQ monitor.
-Reads monitor_log.csv and auto-refreshes every 30 minutes.
-
-Run with:
-    .venv/Scripts/streamlit run src/dashboard.py
+Reads live data from GitHub and auto-refreshes every 30 minutes.
+Hosted on Streamlit Community Cloud.
 """
 
-import time
-import json
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from src import github_data
 try:
     from streamlit_autorefresh import st_autorefresh
 except ImportError:
     st_autorefresh = None
 
-LOG_PATH = Path(__file__).parent / "monitor_log.csv"
-GIT_SYNC_LOG_PATH = Path(__file__).parent / "monitor_git_sync.log"
-STATE_PATH = Path(__file__).parent / "position_state.json"
 SWITCH_UP_THRESHOLD = 11.5
 SWITCH_DOWN_THRESHOLD = 7.0
 REFRESH_SECONDS = 30 * 60
@@ -65,18 +60,16 @@ def set_query_param(key: str, value: str) -> None:
 def load_log() -> pd.DataFrame:
     expected_columns = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]
 
-    if not LOG_PATH.exists():
-        return pd.DataFrame(columns=expected_columns)
-
-    # Skip malformed rows so one bad write never crashes the dashboard.
     try:
-        df = pd.read_csv(LOG_PATH, encoding="utf-8-sig", on_bad_lines="skip")
-    except Exception:
-        return pd.DataFrame(columns=expected_columns)
+        df = pd.read_csv(StringIO(github_data.read_text(github_data.LOG_PATH)))
+    except (pd.errors.ParserError, pd.errors.EmptyDataError) as error:
+        raise github_data.RemoteDataError("The GitHub price log is not valid CSV.") from error
 
     missing_columns = [column for column in expected_columns if column not in df.columns]
     if missing_columns:
-        return pd.DataFrame(columns=expected_columns)
+        raise github_data.RemoteDataError(
+            f"The GitHub price log is missing columns: {', '.join(missing_columns)}."
+        )
 
     df["Price_XST"] = pd.to_numeric(df["Price_XST"], errors="coerce")
     df["Price_XQQ"] = pd.to_numeric(df["Price_XQQ"], errors="coerce")
@@ -94,61 +87,8 @@ def load_log() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=REFRESH_SECONDS)
-def load_last_git_sync_status() -> str:
-    if not GIT_SYNC_LOG_PATH.exists():
-        return ""
-
-    try:
-        last_line = ""
-        with open(GIT_SYNC_LOG_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    last_line = line.strip()
-        if not last_line:
-            return "Last Git Sync: sync log is empty"
-
-        # Expected format: "[YYYY-mm-dd HH:MM:SS TZ] message"
-        if last_line.startswith("[") and "]" in last_line:
-            ts_end = last_line.find("]")
-            timestamp = last_line[1:ts_end].strip()
-            message = last_line[ts_end + 1 :].strip()
-
-            if message.startswith("Pushed"):
-                status = "Success"
-            elif "No monitor_log.csv changes" in message:
-                status = "No changes"
-            elif "Push skipped" in message or "Git push failed" in message:
-                status = "Warning"
-            else:
-                status = "Info"
-
-            return f"Last Git Sync: {timestamp} ({status})"
-
-        return f"Last Git Sync: {last_line}"
-    except Exception as e:
-        return f"Last Git Sync: could not read sync log ({e})"
-
-
-@st.cache_data(ttl=REFRESH_SECONDS)
 def load_position_state() -> dict:
-    if not STATE_PATH.exists():
-        return {}
-    try:
-        with open(STATE_PATH, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-        return payload if isinstance(payload, dict) else {}
-    except Exception:
-        return {}
-
-
-def save_position_state(state: dict) -> tuple[bool, str]:
-    try:
-        with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=True, indent=2)
-        load_position_state.clear()
-        return True, "Saved"
-    except Exception as e:
-        return False, str(e)
+    return github_data.read_position_state()
 
 
 def parse_price_text(value: str) -> float | None:
@@ -180,19 +120,25 @@ def get_latest_price_snapshot(price_col: str) -> tuple[float | None, pd.Timestam
     return float(row[price_col]), pd.to_datetime(row["Timestamp"], errors="coerce")
 
 
-df = load_log()
+if st.button("Refresh from GitHub"):
+    load_log.clear()
+    load_position_state.clear()
+
+try:
+    df = load_log()
+except github_data.RemoteDataError as error:
+    st.error(str(error))
+    st.stop()
 latest_raw = df.iloc[-1] if not df.empty else None
 valid_df = df[df["Signal"] != "DATA ERROR"].dropna(
     subset=["Price_XST", "Price_XQQ", "Delta_$", "Delta_%"]
 )
 latest = valid_df.iloc[-1] if not valid_df.empty else None
-git_sync_status = load_last_git_sync_status()
-if not git_sync_status:
-    if latest_raw is not None:
-        latest_ts = str(latest_raw["Timestamp"]).split(".")[0]
-        git_sync_status = f"Last Git Sync: inferred from latest data update at {latest_ts}"
-    else:
-        git_sync_status = "Last Git Sync: waiting for first data update"
+data_status = (
+    f"Latest GitHub observation: {latest_raw['Timestamp']} ET"
+    if latest_raw is not None
+    else "GitHub price log: waiting for first data update"
+)
 
 
 def render_tendency(label: str, change: float, unit_suffix: str, threshold: float) -> None:
@@ -211,7 +157,7 @@ def render_tendency(label: str, change: float, unit_suffix: str, threshold: floa
 
 
 def render_live_monitor_tab() -> None:
-    st.caption(git_sync_status)
+    st.caption(data_status)
 
     if not valid_df.empty:
         today_start = valid_df["Timestamp"].max().floor('D')
@@ -418,21 +364,21 @@ def render_since_switch_tab() -> None:
         "This view uses the latest available price for each ticker independently, "
         "so calculations still work outside business hours even when timestamps differ."
     )
-    state = load_position_state()
-
-    if not state:
-        state = {}
+    st.link_button("Edit switch inputs on GitHub", github_data.STATE_EDIT_URL)
+    st.caption(
+        "Sign in to GitHub, edit position_state.json, and commit to main. "
+        "Then use Refresh from GitHub here. No changes are saved on the dashboard server."
+    )
+    try:
+        state = load_position_state()
+    except github_data.RemoteDataError as error:
+        st.error(str(error))
+        return
 
     state_holding = str(state.get("holding", DEFAULT_SWITCH_INPUTS["holding"])).strip().upper()
     if state_holding not in ("XST", "XQQ"):
         state_holding = DEFAULT_SWITCH_INPUTS["holding"]
     state_switch_date_text = str(state.get("last_switch_date", DEFAULT_SWITCH_INPUTS["last_switch_date"])).strip()
-    state_switch_date = pd.to_datetime(state_switch_date_text, errors="coerce")
-    if pd.notna(state_switch_date):
-        default_switch_date = state_switch_date.date()
-    else:
-        default_switch_date = pd.to_datetime(DEFAULT_SWITCH_INPUTS["last_switch_date"]).date()
-
     state_cost_basis = state.get("cost_basis") or {}
     state_xst_text = (
         f"{float(DEFAULT_SWITCH_INPUTS['cost_basis']['XST']):.4f}"
@@ -450,47 +396,6 @@ def render_since_switch_tab() -> None:
         if pd.isna(state_amount) or float(state_amount) <= 0
         else f"{float(state_amount):.2f}"
     )
-
-    with st.expander("Edit switch inputs", expanded=False):
-        with st.form("switch_inputs_form"):
-            fcol1, fcol2 = st.columns(2)
-            form_switch_date = fcol1.date_input("Last switch date", value=default_switch_date)
-            form_holding = fcol2.selectbox(
-                "Current holding",
-                options=["XST", "XQQ"],
-                index=0 if state_holding == "XST" else 1,
-            )
-            pcol1, pcol2 = st.columns(2)
-            form_xst = pcol1.text_input("XST trade price", value=state_xst_text, placeholder="e.g. 62.86")
-            form_xqq = pcol2.text_input("XQQ trade price", value=state_xqq_text, placeholder="e.g. 66.14")
-            form_amount = st.text_input("Approximate amount (CAD)", value=state_amount_text, placeholder="e.g. 10000")
-            submitted = st.form_submit_button("Save switch inputs", use_container_width=True)
-
-        if submitted:
-            new_xst = parse_price_text(form_xst)
-            new_xqq = parse_price_text(form_xqq)
-            new_amount = parse_amount_text(form_amount)
-            if new_xst is None or new_xqq is None:
-                st.error("Please enter valid numeric prices for both XST and XQQ.")
-            elif new_amount is None:
-                st.error("Please enter a valid positive approximate amount in CAD.")
-            else:
-                updated_state = {
-                    "holding": form_holding,
-                    "last_switch_date": form_switch_date.isoformat(),
-                    "cost_basis": {
-                        "XST": new_xst,
-                        "XQQ": new_xqq,
-                    },
-                    "approx_amount_cad": new_amount,
-                    "updated_at": pd.Timestamp.now(tz="America/Toronto").strftime("%Y-%m-%d %H:%M:%S %Z"),
-                }
-                ok, msg = save_position_state(updated_state)
-                if ok:
-                    st.success("Switch inputs saved to position_state.json")
-                    state = updated_state
-                else:
-                    st.error(f"Could not save position_state.json: {msg}")
 
     # Build an effective state so defaults are used immediately when file values are missing.
     effective_state = {
@@ -1147,6 +1052,4 @@ st.caption(f"Auto-refreshes every {REFRESH_SECONDS}s")
 if st_autorefresh is not None:
     st_autorefresh(interval=REFRESH_SECONDS * 1000, key="dashboard_autorefresh")
 else:
-    # Fallback when streamlit-autorefresh is unavailable in the runtime env.
-    time.sleep(REFRESH_SECONDS)
-    st.rerun()
+    st.warning("Automatic refresh is unavailable. Use Refresh from GitHub to reload data.")

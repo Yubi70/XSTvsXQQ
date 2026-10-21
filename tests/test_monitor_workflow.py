@@ -53,7 +53,9 @@ class TestMonitorWorkflow(unittest.TestCase):
             git("config", "user.email", "workflow-test@example.com")
             git("config", "commit.gpgsign", "false")
             (repo / ".gitignore").write_text(
-                (ROOT / ".gitignore").read_text(encoding="utf-8"), encoding="utf-8"
+                (ROOT / ".gitignore").read_text(encoding="utf-8")
+                + "\nsrc/position_state.json\n",
+                encoding="utf-8",
             )
             (repo / "src").mkdir()
             log = repo / "src/monitor_log.csv"

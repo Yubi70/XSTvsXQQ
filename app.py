@@ -1,3 +1,5 @@
 """Streamlit Cloud entrypoint for the XST vs XQQ dashboard."""
 
-from src.dashboard import *  # noqa: F401,F403
+import runpy
+
+runpy.run_module("src.dashboard", run_name="__main__")

@@ -1,3 +1,5 @@
 """Compatibility entrypoint for Streamlit deployments."""
 
-from app import *  # noqa: F401,F403
+import runpy
+
+runpy.run_module("src.dashboard", run_name="__main__")

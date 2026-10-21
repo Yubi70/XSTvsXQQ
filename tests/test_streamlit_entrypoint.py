@@ -6,11 +6,10 @@ class TestStreamlitEntrypoint(unittest.TestCase):
     def test_cloud_workflow_persists_prices_and_position_state(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/monitor.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            "git status --porcelain -- src/monitor_log.csv src/position_state.json",
-            workflow,
-        )
-        self.assertIn("git add -- src/monitor_log.csv src/position_state.json", workflow)
+        self.assertIn("git add -- src/monitor_log.csv", workflow)
+        self.assertIn("git add -f -- src/position_state.json", workflow)
+        self.assertIn("git diff --cached --quiet", workflow)
+        self.assertIn("python -m src.monitor --once", workflow)
 
     def test_devcontainer_does_not_launch_local_dashboard(self):
         root = Path(__file__).resolve().parents[1]

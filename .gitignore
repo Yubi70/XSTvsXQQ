@@ -1,6 +1,7 @@
 .venv/
 src/.monitor.lock
-src/position_state.json
+src/monitor_git_sync.log
+src/monitor_task.log
 __pycache__/
 *.pyc
 .env

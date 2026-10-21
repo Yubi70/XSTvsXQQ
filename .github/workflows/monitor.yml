@@ -38,7 +38,7 @@ jobs:
           START_HOLDING: ${{ secrets.START_HOLDING }}
           LAST_SWITCH_COST_XST: ${{ secrets.LAST_SWITCH_COST_XST }}
           LAST_SWITCH_COST_XQQ: ${{ secrets.LAST_SWITCH_COST_XQQ }}
-        run: python src/monitor.py --once
+        run: python -m src.monitor --once
 
       - name: Commit and push updated logs
         run: |

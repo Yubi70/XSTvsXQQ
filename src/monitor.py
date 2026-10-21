@@ -7,20 +7,14 @@ import os
 import csv
 import json
 import smtplib
-import subprocess
-import schedule
-import time
-import atexit
-from datetime import datetime, timedelta
+import argparse
+from datetime import datetime
 from email.mime.text import MIMEText
 import pandas as pd
 import yfinance as yf
-import ctypes
-import threading
 import pytz
-from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+from src.github_data import validate_position_state
 
 SMTP_SENDER     = os.getenv("SMTP_SENDER")
 SMTP_PASSWORD   = os.getenv("SMTP_PASSWORD")
@@ -51,13 +45,7 @@ ENV_COST_XQQ = _parse_optional_float(os.getenv("LAST_SWITCH_COST_XQQ"))
 MARKET_TZ = pytz.timezone("America/Toronto")
 MARKET_OPEN  = (9, 30)   # 9:30 AM ET
 MARKET_CLOSE = (16, 0)   # 4:00 PM ET
-MARKET_STOP  = (16, 30)  # script self-exits at 4:30 PM ET
-FIRST_CHECK_DELAY_MINUTES = 2  # delay opening validation to reduce Yahoo first-minute errors
-CHECK_MINUTE_A = (MARKET_OPEN[1] + FIRST_CHECK_DELAY_MINUTES) % 60
-CHECK_MINUTE_B = (CHECK_MINUTE_A + 30) % 60
 FINAL_CLOSE_CHECK = (16, 2)  # capture one final value just after the close
-LOCK_PATH = os.path.join(os.path.dirname(__file__), ".monitor.lock")
-_LOCK_HANDLE = None
 
 
 def normalize_holding(holding: str | None) -> str:
@@ -98,33 +86,32 @@ def load_state() -> dict:
     if not os.path.isfile(STATE_PATH):
         save_state(default_state)
         return default_state
-    try:
-        with open(STATE_PATH, "r", encoding="utf-8") as f:
-            payload = json.load(f)
+    with open(STATE_PATH, "r", encoding="utf-8") as f:
+        payload = validate_position_state(json.load(f))
 
-        state = {
-            "holding": normalize_holding(payload.get("holding")),
-            "cost_basis": _normalize_cost_basis(payload.get("cost_basis")),
-        }
+    state = {
+        **payload,
+        "holding": normalize_holding(payload.get("holding")),
+        "cost_basis": _normalize_cost_basis(payload.get("cost_basis")),
+    }
 
-        # If state cost is missing, seed from .env so first run can still show P/L.
-        if state["cost_basis"]["XST"] is None and ENV_COST_XST is not None:
-            state["cost_basis"]["XST"] = ENV_COST_XST
-        if state["cost_basis"]["XQQ"] is None and ENV_COST_XQQ is not None:
-            state["cost_basis"]["XQQ"] = ENV_COST_XQQ
+    # Repository secrets seed missing costs, not existing position data.
+    if state["cost_basis"]["XST"] is None and ENV_COST_XST is not None:
+        state["cost_basis"]["XST"] = ENV_COST_XST
+    if state["cost_basis"]["XQQ"] is None and ENV_COST_XQQ is not None:
+        state["cost_basis"]["XQQ"] = ENV_COST_XQQ
 
-        return state
-    except Exception:
-        save_state(default_state)
-        return default_state
+    return state
 
 
 def save_state(state: dict) -> None:
     payload = {
+        **state,
         "holding": normalize_holding(state.get("holding")),
         "cost_basis": _normalize_cost_basis(state.get("cost_basis")),
         "updated_at": datetime.now(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
+    validate_position_state(payload)
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=True, indent=2)
 
@@ -185,56 +172,6 @@ def filter_actionable_signal(raw_signal: str, holding: str) -> str:
     if raw_signal in ("", "DATA ERROR"):
         return raw_signal
     return raw_signal if raw_signal == expected_signal_for_holding(holding) else ""
-
-
-def acquire_single_instance_lock() -> bool:
-    global _LOCK_HANDLE
-    try:
-        _LOCK_HANDLE = open(LOCK_PATH, "a+")
-        _LOCK_HANDLE.seek(0)
-        _LOCK_HANDLE.write("0")
-        _LOCK_HANDLE.flush()
-        _LOCK_HANDLE.seek(0)
-        if os.name == "nt":
-            import msvcrt
-            msvcrt.locking(_LOCK_HANDLE.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(_LOCK_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        _LOCK_HANDLE.seek(0)
-        _LOCK_HANDLE.write(str(os.getpid()))
-        _LOCK_HANDLE.truncate()
-        _LOCK_HANDLE.flush()
-        return True
-    except OSError:
-        return False
-
-
-def release_single_instance_lock() -> None:
-    global _LOCK_HANDLE
-    if _LOCK_HANDLE is None:
-        return
-    try:
-        if os.name == "nt":
-            import msvcrt
-            _LOCK_HANDLE.seek(0)
-            msvcrt.locking(_LOCK_HANDLE.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(_LOCK_HANDLE.fileno(), fcntl.LOCK_UN)
-    except OSError:
-        pass
-    finally:
-        _LOCK_HANDLE.close()
-        _LOCK_HANDLE = None
-
-
-def is_market_open() -> bool:
-    now = datetime.now(MARKET_TZ)
-    if now.weekday() >= 5:  # Saturday=5, Sunday=6
-        return False
-    t = (now.hour, now.minute)
-    return MARKET_OPEN <= t < MARKET_CLOSE
 
 
 def is_within_collection_window() -> bool:
@@ -350,89 +287,6 @@ def write_log(row: dict) -> None:
         writer.writerow(row)
 
 
-REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
-GIT_SYNC_LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_git_sync.log")
-SYNC_PATHS = ["src/monitor_log.csv", "src/position_state.json"]
-
-
-def _append_git_sync_log(message: str) -> None:
-    ts = datetime.now(MARKET_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
-    with open(GIT_SYNC_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"[{ts}] {message}\n")
-
-
-def get_changed_sync_paths() -> list[str]:
-    """Return the repo paths that changed and should be synced to Git."""
-    import os as _os
-    git_env = {**_os.environ, "GCM_CREDENTIAL_STORE": "dpapi", "GIT_TERMINAL_PROMPT": "0"}
-    status = subprocess.run(
-        ["git", "-C", REPO_ROOT, "status", "--porcelain", "--untracked-files=all", *SYNC_PATHS],
-        capture_output=True,
-        text=True,
-        check=True,
-        env=git_env,
-    )
-
-    changed: list[str] = []
-    for line in status.stdout.splitlines():
-        if not line.strip():
-            continue
-        path = line[3:].strip()
-        if path in SYNC_PATHS:
-            changed.append(path)
-    return sorted(set(changed))
-
-
-def git_push_log() -> None:
-    """Commit and push the monitor log and current state to GitHub when either changed."""
-    import os as _os
-    _git_env = {**_os.environ, "GCM_CREDENTIAL_STORE": "dpapi", "GIT_TERMINAL_PROMPT": "0"}
-    try:
-        changed_paths = get_changed_sync_paths()
-        if not changed_paths:
-            _append_git_sync_log("No monitor_log.csv or position_state.json changes to push.")
-            return
-
-        subprocess.run(
-            ["git", "-C", REPO_ROOT, "add", *changed_paths],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=_git_env,
-        )
-        commit_message = "chore: update monitor state"
-        commit = subprocess.run(
-            ["git", "-C", REPO_ROOT, "commit", "-m", commit_message],
-            capture_output=True,
-            text=True,
-            env=_git_env,
-        )
-        if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr).lower():
-            raise subprocess.CalledProcessError(commit.returncode, commit.args, commit.stdout, commit.stderr)
-
-        # Remote main may have advanced (e.g. historical-data workflow); rebase first.
-        subprocess.run(
-            ["git", "-C", REPO_ROOT, "pull", "--rebase", "origin", "main"],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=_git_env,
-        )
-        subprocess.run(
-            ["git", "-C", REPO_ROOT, "push", "origin", "HEAD:main"],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=_git_env,
-        )
-        _append_git_sync_log(f"Pushed {', '.join(changed_paths)} to origin/main.")
-        print(f"  {'; '.join(changed_paths)} pushed to GitHub.")
-    except subprocess.CalledProcessError as e:
-        details = (e.stderr or e.stdout or str(e)).strip()
-        _append_git_sync_log(f"Git sync failed: {details}")
-        print(f"  [WARN] Git push failed: {details}")
-
-
 def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
     if not SMTP_SENDER or not SMTP_PASSWORD or not ALERT_RECIPIENTS:
         print("  [WARN] Email not configured — skipping email alert.")
@@ -452,34 +306,10 @@ def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
     msg["From"]    = SMTP_SENDER
     msg["To"]      = ", ".join(ALERT_RECIPIENTS)
 
-    def send():
-        try:
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(SMTP_SENDER, SMTP_PASSWORD)
-                server.sendmail(SMTP_SENDER, ALERT_RECIPIENTS, msg.as_string())
-            print(f"  Email alert sent to {', '.join(ALERT_RECIPIENTS)}")
-        except Exception as e:
-            print(f"  [WARN] Email failed: {e}")
-
-    if os.getenv("GITHUB_ACTIONS"):
-        # A one-shot process must finish sending before it exits.
-        send()
-    else:
-        threading.Thread(target=send, daemon=True).start()
-
-
-def send_notification(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
-    title = f"Switch Signal: {signal}"
-    msg = f"XST.TO: ${xst}  |  XQQ.TO: ${xqq}\nDelta: {delta_pct:+.2f}%\n\nConsider rebalancing!"
-
-    # Run in a background thread so the monitor loop isn't blocked
-    def show_popup():
-        try:
-            ctypes.windll.user32.MessageBoxW(0, msg, title, 0x00001030)
-        except Exception:
-            pass
-
-    threading.Thread(target=show_popup, daemon=True).start()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
+        server.login(SMTP_SENDER, SMTP_PASSWORD)
+        server.sendmail(SMTP_SENDER, ALERT_RECIPIENTS, msg.as_string())
+    print(f"  Email alert sent to {', '.join(ALERT_RECIPIENTS)}")
 
 
 def run_check() -> None:
@@ -501,15 +331,12 @@ def run_check() -> None:
     result["Signal"] = filter_actionable_signal(raw_signal, holding)
     row = {"Timestamp": ts, **result}
     write_log(row)
-    # In GitHub Actions the workflow itself commits/pushes via GITHUB_TOKEN.
-    if not os.getenv("GITHUB_ACTIONS"):
-        threading.Thread(target=git_push_log, daemon=True).start()
 
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
     print(f"  Delta  : {result['Delta_$']} CAD  ({result['Delta_%']}%)")
     if position_pnl["Status"] == "NO COST":
-        print(f"  Position P/L ({holding}): set LAST_SWITCH_COST_{holding} in .env to track win/loss.")
+        print(f"  Position P/L ({holding}): set cost_basis in the GitHub position state to track win/loss.")
     elif position_pnl["Status"] == "NO PRICE":
         print(f"  Position P/L ({holding}): unavailable (price fetch failed).")
     else:
@@ -521,8 +348,6 @@ def run_check() -> None:
         print(f"  Threshold reached ({raw_signal}) but ignored because current holding is {holding}.")
     if result["Signal"]:
         print(f"  *** SIGNAL: {result['Signal']} ***")
-        if os.name == "nt" and not os.getenv("GITHUB_ACTIONS"):
-            send_notification(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
         new_holding = opposite_holding(holding)
         state["holding"] = new_holding
@@ -535,47 +360,13 @@ def run_check() -> None:
     print(f"  Logged to {LOG_PATH}")
 
 
-def run_check_safely() -> None:
-    """Keep the recurring monitor alive when one scheduled check fails."""
-    try:
-        run_check()
-    except Exception as error:
-        now = datetime.now(MARKET_TZ)
-        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S %Z')}] Check failed; will retry: {error}")
-
-
 def main() -> None:
-    if not acquire_single_instance_lock():
-        print("Another monitor instance is already running. Exiting.")
-        return
-    atexit.register(release_single_instance_lock)
-
-    print("=== XST vs XQQ Price Monitor ===")
-    print(f"Checking every 30 minutes. Log: {LOG_PATH}")
-    print(f"Scheduled checks at :{CHECK_MINUTE_A:02d} and :{CHECK_MINUTE_B:02d} each hour during market hours.")
-    print(f"Final close capture scheduled for {FINAL_CLOSE_CHECK[0]:02d}:{FINAL_CLOSE_CHECK[1]:02d} ET.")
-    print("Auto-exits at 16:30 ET. Press Ctrl+C to stop manually.\n")
-
-    now = datetime.now(MARKET_TZ)
-    open_time = now.replace(hour=MARKET_OPEN[0], minute=MARKET_OPEN[1], second=0, microsecond=0)
-    first_check_time = open_time + timedelta(minutes=FIRST_CHECK_DELAY_MINUTES)
-
-    if is_market_open() and now >= first_check_time:
-        run_check_safely()  # run immediately only if we are already past the opening delay
-    elif now.weekday() < 5 and open_time <= now < first_check_time:
-        print(f"Waiting until {first_check_time.strftime('%H:%M ET')} for first validation of the day.")
-
-    # Anchor checks to wall-clock minutes, e.g. 09:32, 10:02, 10:32...
-    schedule.every().hour.at(f":{CHECK_MINUTE_A:02d}").do(run_check_safely)
-    schedule.every().hour.at(f":{CHECK_MINUTE_B:02d}").do(run_check_safely)
-
-    while True:
-        now = datetime.now(MARKET_TZ)
-        if now.weekday() < 5 and (now.hour, now.minute) >= MARKET_STOP:
-            print(f"\n[{now.strftime('%Y-%m-%d %H:%M')} ET] 16:30 reached — shutting down.")
-            break
-        schedule.run_pending()
-        time.sleep(30)
+    parser = argparse.ArgumentParser(description="Single-check collector for GitHub Actions.")
+    parser.add_argument("--once", action="store_true", help="Run one check (the only execution mode).")
+    parser.parse_args()
+    if os.getenv("GITHUB_ACTIONS") != "true":
+        parser.error("Run the Price Monitor workflow on GitHub; local collection is disabled.")
+    run_once()
 
 
 def run_once() -> None:
@@ -585,12 +376,4 @@ def run_once() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
-    try:
-        if "--once" in sys.argv:
-            run_once()
-        else:
-            main()
-    except KeyboardInterrupt:
-        print("\nMonitor stopped manually.")
+    main()

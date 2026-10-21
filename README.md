@@ -1,45 +1,56 @@
 # XST vs XQQ
 
-This project provides tools and analysis for comparing XST and XQQ datasets or strategies.
+Cloud-hosted price monitoring and strategy comparisons for XST.TO and XQQ.TO.
 
 ## Project Structure
 - `src/` — Source code for analysis and comparison
 - `tests/` — Unit tests
 
-## Setup
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run analysis scripts from the `src` folder.
-3. Use the hosted [Streamlit dashboard](https://xstvsxqq-lngt5gyi4yz7o7hsmiaufr.streamlit.app/).
+## Fully remote operation
 
-## Cloud-only operation
+Your computer can be turned off:
 
-Streamlit Cloud is the primary dashboard. The `Price Monitor` GitHub Actions
-workflow collects prices, sends configured email alerts, and commits both the
-price log and position state. No local dashboard or Windows monitor is needed.
-The dev container no longer starts Streamlit or opens port 8501 automatically.
+- [Streamlit dashboard](https://xstvsxqq-lngt5gyi4yz7o7hsmiaufr.streamlit.app/):
+  displays the live price log and position state directly from GitHub `main`.
+- **Price Monitor** in GitHub Actions: collects prices, sends email alerts,
+  and commits the price log and position state.
+- **Refresh Historical Price Data** in GitHub Actions: updates historical
+  datasets and analysis artifacts on weekdays.
+- **Position editing**: use **Edit switch inputs on GitHub** in the dashboard.
+  GitHub sign-in and repository permissions control who can commit changes.
+  The dashboard never writes to a temporary server file and needs no write token.
 
-On the Windows machine that previously ran the monitor, end and disable its
-scheduled task in an Administrator terminal:
+Data is cached for 30 minutes. Use **Refresh from GitHub** after committing a
+position edit. GitHub may take a few minutes to serve newly committed raw data.
+Network or data errors are displayed rather than silently loading a local copy.
+
+### One-time migration from the old Windows monitor
+
+On the Windows machine that previously ran the collector, stop it and remove
+its scheduled task in an Administrator terminal:
 
 ```powershell
-schtasks /change /tn "XSTvsXQQ_Monitor" /disable
 schtasks /end /tn "XSTvsXQQ_Monitor"
+schtasks /delete /tn "XSTvsXQQ_Monitor" /f
 ```
 
-If the monitor was also started manually, stop that process with Ctrl+C.
-The cloud email configuration uses GitHub Actions secrets, not the local `.env`.
-See [monitor documentation](docs/monitor.md) for required secret names and timing.
-Local scripts remain available for development only.
+If the monitor was started manually, stop that process with Ctrl+C as well.
+An absent or inactive task can report that there is nothing to stop.
+The collector no longer supports a local loop, popup, lock, git push, or `.env`.
+Its command-line entrypoint rejects execution outside GitHub Actions.
 
 ## Streamlit Cloud
-This repository now includes a root entrypoint at `app.py` (and `streamlit_app.py`) so Streamlit Cloud can discover the app without needing to target `src/dashboard.py` manually.
+Deploy this repository's `main` branch on Streamlit Community Cloud using
+`app.py` (or `streamlit_app.py`) as the entrypoint. Keep both GitHub Actions
+workflows enabled. Configure the email secrets in GitHub, not on a computer.
+See [monitor documentation](docs/monitor.md) for secret names, position fields,
+schedule limitations, and troubleshooting. No new Streamlit secrets are required.
 
-## Streamlit Auto-Update
-The project includes `.streamlit/config.toml` with `runOnSave = true`.
-When you save changes to the dashboard code, Streamlit automatically reloads the page.
+## Development and tests
 
-## Description
-Replace this section with a detailed description of your project goals and methodology.
+Development tools are optional; they are not needed to operate the hosted app.
+Install dependencies with `pip install -r requirements.txt`, then run
+`python -m unittest discover -s tests`.
 
 ## Monitor Delta Formula
 The live monitor uses a symmetric percentage spread based on the average of XST and XQQ prices:
@@ -51,7 +62,7 @@ Details: [docs/monitor.md](docs/monitor.md)
 ## Dashboard Tabs
 The web dashboard includes:
 - `Live Monitor` tab for real-time prices/delta/logs
-- `Since Last Switch` tab for switched vs no-switch comparison, including an editable input form and `Switch edge ($)` output
+- `Since Last Switch` tab for switched vs no-switch comparison, a GitHub edit link, and `Switch edge ($)` output
 
 Worked example: see the **Dashboard Tabs (Web Page)** section in [docs/monitor.md](docs/monitor.md).
 
