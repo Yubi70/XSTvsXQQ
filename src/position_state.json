@@ -1,8 +1,9 @@
 {
   "holding": "XST",
   "cost_basis": {
-    "XST": 67.49,
-    "XQQ": null
+    "XST": 62.86,
+    "XQQ": 66.14
   },
-  "updated_at": "2026-10-21 12:41:19 EDT"
+  "last_switch_date": "2026-04-24",
+  "approx_amount_cad": 440020.0
 }
