@@ -244,7 +244,8 @@ requirements.txt        — Python dependencies
 
 Open the hosted Streamlit dashboard. Keep the `Price Monitor` workflow enabled
 and configure its email secrets. Deploy `main` with `app.py` or
-`streamlit_app.py` on Streamlit Community Cloud. Keep the historical-data
+`streamlit_app.py` on Streamlit Community Cloud; an existing deployment using
+`src/dashboard.py` works too. Keep the historical-data
 workflow enabled too. There is no local collector to launch.
 
 On the Windows machine that previously ran the monitor, use an Administrator

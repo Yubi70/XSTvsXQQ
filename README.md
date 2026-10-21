@@ -41,7 +41,8 @@ Its command-line entrypoint rejects execution outside GitHub Actions.
 
 ## Streamlit Cloud
 Deploy this repository's `main` branch on Streamlit Community Cloud using
-`app.py` (or `streamlit_app.py`) as the entrypoint. Keep both GitHub Actions
+`app.py` (or `streamlit_app.py`) as the entrypoint. Existing deployments using
+`src/dashboard.py` are also supported. Keep both GitHub Actions
 workflows enabled. Configure the email secrets in GitHub, not on a computer.
 See [monitor documentation](docs/monitor.md) for secret names, position fields,
 schedule limitations, and troubleshooting. No new Streamlit secrets are required.

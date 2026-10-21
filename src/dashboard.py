@@ -10,7 +10,10 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from src import github_data
+if __package__:
+    from . import github_data
+else:
+    import github_data
 try:
     from streamlit_autorefresh import st_autorefresh
 except ImportError:

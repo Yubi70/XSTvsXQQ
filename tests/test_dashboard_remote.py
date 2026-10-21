@@ -1,4 +1,6 @@
 import json
+import importlib
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,11 +35,18 @@ class TestRemoteDashboard(unittest.TestCase):
         self.reader = patch("src.github_data.read_text", side_effect=self.responses.__getitem__)
         self.mock_read = self.reader.start()
         self.addCleanup(self.reader.stop)
+        with patch.object(sys, "path", [str(ROOT / "src"), *sys.path]):
+            direct_data = importlib.import_module("github_data")
+        self.direct_reader = patch.object(
+            direct_data, "read_text", side_effect=self.responses.__getitem__
+        )
+        self.direct_reader.start()
+        self.addCleanup(self.direct_reader.stop)
         self.addCleanup(st.cache_data.clear)
 
-    def test_both_cloud_entrypoints_rerender_and_offer_only_github_editing(self):
+    def test_all_cloud_entrypoints_rerender_and_offer_only_github_editing(self):
         before = (ROOT / github_data.STATE_PATH).read_bytes()
-        for entrypoint in ("app.py", "streamlit_app.py"):
+        for entrypoint in ("app.py", "streamlit_app.py", "src/dashboard.py"):
             with self.subTest(entrypoint=entrypoint):
                 app = AppTest.from_file(str(ROOT / entrypoint)).run(timeout=30)
                 self.assertFalse(app.exception)
