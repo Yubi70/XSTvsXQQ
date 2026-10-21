@@ -8,11 +8,14 @@ import csv
 import json
 import smtplib
 import argparse
-from datetime import datetime
+import math
+import tempfile
+from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
 import pandas as pd
 import yfinance as yf
 import pytz
+import exchange_calendars as xcals
 
 from src.github_data import validate_position_state
 
@@ -22,7 +25,7 @@ ALERT_RECIPIENTS = [r.strip() for r in os.getenv("ALERT_RECIPIENT", "").split(",
 
 TICKERS = ["XST.TO", "XQQ.TO"]
 LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_log.csv")
-LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]
+LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal", "Observation"]
 SWITCH_UP_THRESHOLD_PCT = 11.5    # XST -> XQQ when delta >= +11.5%
 SWITCH_DOWN_THRESHOLD_PCT = 7.0   # XQQ -> XST when delta <= -7.0%
 STATE_PATH = os.path.join(os.path.dirname(__file__), "position_state.json")
@@ -43,9 +46,8 @@ ENV_COST_XQQ = _parse_optional_float(os.getenv("LAST_SWITCH_COST_XQQ"))
 
 
 MARKET_TZ = pytz.timezone("America/Toronto")
-MARKET_OPEN  = (9, 30)   # 9:30 AM ET
-MARKET_CLOSE = (16, 0)   # 4:00 PM ET
-FINAL_CLOSE_CHECK = (16, 2)  # capture one final value just after the close
+SESSION_LOOKBACK_DAYS = 30
+CLOSE_PUBLICATION_DELAY = timedelta(minutes=15)
 
 
 def normalize_holding(holding: str | None) -> str:
@@ -174,12 +176,20 @@ def filter_actionable_signal(raw_signal: str, holding: str) -> str:
     return raw_signal if raw_signal == expected_signal_for_holding(holding) else ""
 
 
+def session_schedule(start: date, end: date) -> pd.DataFrame:
+    calendar = xcals.get_calendar(
+        "XTSE", start=start - timedelta(days=7), end=end + timedelta(days=7)
+    )
+    return calendar.schedule.loc[start.isoformat():end.isoformat()]
+
+
 def is_within_collection_window() -> bool:
     now = datetime.now(MARKET_TZ)
-    if now.weekday() >= 5:
+    schedule = session_schedule(now.date(), now.date())
+    if schedule.empty:
         return False
-    t = (now.hour, now.minute)
-    return MARKET_OPEN <= t < MARKET_CLOSE or t == FINAL_CLOSE_CHECK
+    session = schedule.iloc[0]
+    return session["open"] <= now < session["close"]
 
 
 
@@ -278,13 +288,126 @@ def compute_delta(prices: dict[str, float]) -> dict:
     }
 
 
+def read_log_rows() -> list[dict]:
+    if not os.path.isfile(LOG_PATH) or os.path.getsize(LOG_PATH) == 0:
+        return []
+    with open(LOG_PATH, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames not in (LOG_FIELDS, LOG_FIELDS[:-1]):
+            raise ValueError("Unrecognized monitor log columns; refusing to overwrite the log.")
+        rows = list(reader)
+    for row in rows:
+        if None in row or any(row.get(field) is None for field in LOG_FIELDS[:-1]):
+            raise ValueError("Malformed monitor log row; refusing to overwrite the log.")
+        row["Observation"] = row.get("Observation") or "LIVE"
+    return rows
+
+
+def replace_log(rows: list[dict]) -> None:
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", newline="", encoding="utf-8",
+            dir=os.path.dirname(LOG_PATH), delete=False,
+        ) as output:
+            temporary_path = output.name
+            writer = csv.DictWriter(output, fieldnames=LOG_FIELDS)
+            writer.writeheader()
+            writer.writerows(sorted(rows, key=lambda row: row["Timestamp"][:19]))
+        os.replace(temporary_path, LOG_PATH)
+    finally:
+        if temporary_path is not None and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
+
 def write_log(row: dict) -> None:
-    file_exists = os.path.isfile(LOG_PATH)
-    with open(LOG_PATH, "a", newline="") as f:
+    file_exists = os.path.isfile(LOG_PATH) and os.path.getsize(LOG_PATH) > 0
+    if file_exists:
+        with open(LOG_PATH, newline="", encoding="utf-8-sig") as f:
+            header = next(csv.reader(f))
+        if header != LOG_FIELDS:
+            replace_log(read_log_rows())
+    with open(LOG_PATH, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=LOG_FIELDS)
         if not file_exists:
             writer.writeheader()
-        writer.writerow(row)
+        writer.writerow({**row, "Observation": row.get("Observation", "LIVE")})
+
+
+def record_session_boundaries(now: datetime | None = None) -> None:
+    """Repair opening/closing observations without replaying historical alerts."""
+    now = now or datetime.now(MARKET_TZ)
+    if now.tzinfo is None:
+        raise ValueError("Session recovery requires a timezone-aware current time.")
+    now = now.astimezone(MARKET_TZ)
+    start = now.date() - timedelta(days=SESSION_LOOKBACK_DAYS)
+    schedule = session_schedule(start, now.date())
+    expected = []
+    for session_date, session in schedule.iterrows():
+        for observation, field, time_key in (("OPEN", "Open", "open"), ("CLOSE", "Close", "close")):
+            timestamp = session[time_key].tz_convert(MARKET_TZ)
+            available_at = timestamp + (CLOSE_PUBLICATION_DELAY if observation == "CLOSE" else timedelta())
+            if available_at <= now:
+                expected.append((session_date.date(), observation, field, timestamp))
+    if not expected:
+        return
+
+    histories = {}
+    for ticker in TICKERS:
+        history = yf.Ticker(ticker).history(
+            start=start.isoformat(), end=(now.date() + timedelta(days=1)).isoformat(),
+            interval="1d", auto_adjust=False, actions=False, timeout=30, raise_errors=True,
+        )
+        if history.empty or not {"Open", "Close"}.issubset(history.columns):
+            raise ValueError(f"Yahoo returned no daily Open/Close data for {ticker}.")
+        dates = pd.DatetimeIndex(history.index)
+        if dates.tz is not None:
+            dates = dates.tz_convert(MARKET_TZ)
+        history = history.copy()
+        history.index = dates.date
+        if history.index.has_duplicates:
+            raise ValueError(f"Yahoo returned duplicate daily sessions for {ticker}.")
+        histories[ticker] = history
+
+    rows = read_log_rows()
+    positions = {
+        (row["Timestamp"], row["Observation"]): index
+        for index, row in enumerate(rows) if row["Observation"] in ("OPEN", "CLOSE")
+    }
+    changed = False
+    missing = []
+    for session_date, observation, field, timestamp in expected:
+        prices = {}
+        for ticker, history in histories.items():
+            value = history.at[session_date, field] if session_date in history.index else None
+            if value is None or pd.isna(value) or not math.isfinite(float(value)) or float(value) <= 0:
+                missing.append(f"{ticker} {session_date} {observation}")
+            else:
+                prices[ticker] = round(float(value), 4)
+        if len(prices) != len(TICKERS):
+            continue
+        result = compute_delta(prices)
+        result["Signal"] = ""
+        row = {
+            "Timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            **result, "Observation": observation,
+        }
+        row = {field_name: str(row[field_name]) for field_name in LOG_FIELDS}
+        key = (row["Timestamp"], observation)
+        if key not in positions:
+            positions[key] = len(rows)
+            rows.append(row)
+            changed = True
+        elif rows[positions[key]] != row:
+            rows[positions[key]] = row
+            changed = True
+    if changed:
+        replace_log(rows)
+        print("Saved Yahoo session opening/closing prices; no historical alerts were sent.")
+    else:
+        print("Session opening/closing prices are already up to date.")
+    if missing:
+        raise ValueError("Yahoo session prices unavailable; retry on the next run: " + ", ".join(missing))
 
 
 def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
@@ -362,11 +485,16 @@ def run_check() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Single-check collector for GitHub Actions.")
-    parser.add_argument("--once", action="store_true", help="Run one check (the only execution mode).")
-    parser.parse_args()
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--once", action="store_true", help="Run one live price check.")
+    modes.add_argument("--session-boundaries", action="store_true", help="Recover session Open/Close prices.")
+    arguments = parser.parse_args()
     if os.getenv("GITHUB_ACTIONS") != "true":
         parser.error("Run the Price Monitor workflow on GitHub; local collection is disabled.")
-    run_once()
+    if arguments.session_boundaries:
+        record_session_boundaries()
+    else:
+        run_once()
 
 
 def run_once() -> None:

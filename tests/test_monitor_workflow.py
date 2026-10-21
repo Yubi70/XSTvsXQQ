@@ -9,6 +9,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestMonitorWorkflow(unittest.TestCase):
+    def test_boundary_recovery_runs_after_live_check_and_before_persistence(self):
+        workflow = (ROOT / ".github/workflows/monitor.yml").read_text(encoding="utf-8")
+        self.assertIn('cron: "15 22 * * 1-5"', workflow)
+        self.assertIn("python -m src.monitor --session-boundaries", workflow)
+        self.assertLess(workflow.index("Run price check"), workflow.index("Record session opening"))
+        self.assertLess(workflow.index("Record session opening"), workflow.index("Commit and push"))
+        self.assertEqual(
+            workflow.count("if: ${{ !cancelled() && steps.collect.outcome != 'skipped' }}"), 2
+        )
+
     def test_persists_log_without_state(self):
         self.check_persistence(log_changed=True)
 

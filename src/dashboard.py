@@ -73,6 +73,9 @@ def load_log() -> pd.DataFrame:
         raise github_data.RemoteDataError(
             f"The GitHub price log is missing columns: {', '.join(missing_columns)}."
         )
+    if "Observation" not in df.columns:
+        df["Observation"] = "LIVE"
+    df["Observation"] = df["Observation"].fillna("LIVE")
 
     df["Price_XST"] = pd.to_numeric(df["Price_XST"], errors="coerce")
     df["Price_XQQ"] = pd.to_numeric(df["Price_XQQ"], errors="coerce")
@@ -85,7 +88,9 @@ def load_log() -> pd.DataFrame:
     # Never present a future-dated observation as the current market value.
     now_market = pd.Timestamp.now(tz=MARKET_TIMEZONE).tz_localize(None)
     df = df[df["Timestamp"] <= now_market]
-    df = df.sort_values("Timestamp").drop_duplicates(subset=["Timestamp"], keep="last")
+    df = df.sort_values("Timestamp", kind="stable").drop_duplicates(
+        subset=["Timestamp", "Observation"], keep="last"
+    )
     return df
 
 
@@ -354,7 +359,7 @@ def render_live_monitor_tab() -> None:
         return [""] * len(row)
 
     st.dataframe(
-        recent[["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]]
+        recent[["Timestamp", "Observation", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal"]]
         .style.apply(highlight_signal, axis=1),
         use_container_width=True,
         height=400,

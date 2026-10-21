@@ -94,6 +94,20 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertIn("missing columns", app.error[0].value)
 
+    def test_boundary_rows_and_live_signals_at_same_time_are_both_preserved(self):
+        self.responses[github_data.LOG_PATH] = (
+            "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal,Observation\n"
+            "2026-10-20 09:30:00 EDT,90.0,60.0,30.0,40.0,XST HIGH vs XQQ,LIVE\n"
+            "2026-10-20 09:30:00 EDT,70.0,68.0,2.0,2.9,,OPEN\n"
+            "2026-10-20 16:00:00 EDT,72.0,68.0,4.0,5.7,,CLOSE\n"
+        )
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        recent = app.dataframe[0].value
+        self.assertEqual(len(recent), 3)
+        self.assertEqual(set(recent["Observation"]), {"LIVE", "OPEN", "CLOSE"})
+        self.assertTrue(any("XST HIGH vs XQQ" == signal for signal in recent["Signal"].dropna()))
+
 
 if __name__ == "__main__":
     unittest.main()

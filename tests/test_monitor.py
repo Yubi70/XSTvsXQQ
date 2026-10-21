@@ -51,8 +51,11 @@ class TestMonitor(unittest.TestCase):
             ("2026-10-21 09:30", True),
             ("2026-10-21 15:59", True),
             ("2026-10-21 16:00", False),
-            ("2026-10-21 16:02", True),
+            ("2026-10-21 16:02", False),
             ("2026-10-24 10:00", False),
+            ("2026-10-12 10:00", False),
+            ("2025-12-24 12:59", True),
+            ("2025-12-24 13:00", False),
         ]
         for timestamp, expected in cases:
             now = monitor.MARKET_TZ.localize(datetime.strptime(timestamp, "%Y-%m-%d %H:%M"))

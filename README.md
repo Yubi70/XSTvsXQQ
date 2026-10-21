@@ -13,7 +13,9 @@ Your computer can be turned off:
 - [Streamlit dashboard](https://xstvsxqq-lngt5gyi4yz7o7hsmiaufr.streamlit.app/):
   displays the live price log and position state directly from GitHub `main`.
 - **Price Monitor** in GitHub Actions: collects prices, sends email alerts,
-  and commits the price log and position state.
+  and commits the price log and position state. It also records Yahoo's daily
+  opening and closing prices at the exchange's session times (normally 09:30
+  and 16:00 Toronto time), repairing missing records on later runs.
 - **Refresh Historical Price Data** in GitHub Actions: updates historical
   datasets and analysis artifacts on weekdays.
 - **Position editing**: use **Edit switch inputs on GitHub** in the dashboard.
@@ -23,6 +25,10 @@ Your computer can be turned off:
 Data is cached for 30 minutes. Use **Refresh from GitHub** after committing a
 position edit. GitHub may take a few minutes to serve newly committed raw data.
 Network or data errors are displayed rather than silently loading a local copy.
+The recent log identifies `LIVE`, `OPEN`, and `CLOSE` observations. Opening and
+closing records may appear later than their market timestamps; holidays and
+early closes follow the Toronto exchange calendar. Historical recovery never
+sends old alerts or changes your holding.
 
 ### One-time migration from the old Windows monitor
 

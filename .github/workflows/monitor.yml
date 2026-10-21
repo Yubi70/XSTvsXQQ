@@ -3,9 +3,11 @@ name: Price Monitor
 on:
   schedule:
     # Every 30 min, 13:00-21:00 UTC, Mon-Fri — covers 9:30-16:00 ET across both
-    # EDT and EST. monitor.py itself gates on America/Toronto market hours, so
-    # runs outside the real trading window are safe no-ops.
+    # EDT and EST. Live checks use the Toronto exchange calendar; daily
+    # Open/Close recovery also runs outside the live trading window.
     - cron: "*/30 13-21 * * 1-5"
+    # Late retry for closing prices that Yahoo publishes after the session.
+    - cron: "15 22 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
@@ -31,6 +33,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run price check
+        id: collect
         env:
           SMTP_SENDER: ${{ secrets.SMTP_SENDER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
@@ -40,7 +43,12 @@ jobs:
           LAST_SWITCH_COST_XQQ: ${{ secrets.LAST_SWITCH_COST_XQQ }}
         run: python -m src.monitor --once
 
+      - name: Record session opening and closing prices
+        if: ${{ !cancelled() && steps.collect.outcome != 'skipped' }}
+        run: python -m src.monitor --session-boundaries
+
       - name: Commit and push updated logs
+        if: ${{ !cancelled() && steps.collect.outcome != 'skipped' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

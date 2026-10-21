@@ -7,3 +7,4 @@ streamlit-autorefresh
 starlette<1.0
 plotly
 python-docx
+exchange-calendars>=4,<5

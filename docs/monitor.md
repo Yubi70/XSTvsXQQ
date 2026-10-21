@@ -58,10 +58,12 @@ State is stored in `src/position_state.json`.
 
 ## Schedule
 
-| Time (ET) | Action |
+| Time | Action |
 |---|---|
 | Mon–Fri, 13:00–21:30 UTC | GitHub Actions schedules checks every 30 minutes |
-| During market hours | Collector fetches prices; checks outside the collection window are skipped |
+| During exchange session hours | Collector fetches live prices; live checks outside the session are skipped |
+| After every scheduled live check | Recover daily opening/closing prices for recent sessions, even if the live check failed or the market is closed |
+| Mon–Fri, 22:15 UTC | Additional late retry for published closing prices |
 | After each collection | Workflow commits the price log and position state to GitHub |
 
 GitHub Actions scheduled runs can be delayed; exact collection times are not
@@ -72,6 +74,32 @@ Use **Refresh from GitHub** to clear the dashboard's live-data caches. GitHub's
 raw-data service can take a few minutes to reflect a new commit.
 The separate `Refresh Historical Price Data` workflow updates historical
 datasets and generated analysis artifacts at 22:00 UTC on weekdays.
+
+### Opening and closing prices
+
+The log records Yahoo Finance's **unadjusted daily Open and Close** for both
+tickers, labeled with the exchange session's opening/closing timestamps.
+These are not the latest quotes at the time a delayed workflow happens to run.
+
+- On a normal Toronto trading day, `OPEN` is **09:30** and `CLOSE` is **16:00**.
+- The `XTSE` exchange calendar handles daylight saving, holidays, and early
+  closes. Holidays have no fabricated session records; an early close is labeled
+  with its actual closing time rather than 16:00.
+- The opening record is eligible once the market opens. Closing recovery waits
+  at least 15 minutes after the close to allow daily prices to be published.
+- Every workflow run rechecks the last **30 calendar days**. Missing records
+  are backfilled, and later vendor corrections update the same boundary record
+  instead of creating duplicates. The additional 22:15 UTC retry is 18:15 EDT
+  or 17:15 EST.
+- If Yahoo data is missing, the workflow reports an error and later runs retry.
+  Valid recovered rows are still committed. A provider outage or a dropped
+  GitHub run can delay availability; this is not an exact-time delivery guarantee.
+
+`Observation` identifies `LIVE`, `OPEN`, or `CLOSE` in the log and dashboard.
+Existing six-column logs are upgraded without discarding live observations or
+alerts. Live observations sharing a boundary timestamp remain separate.
+Boundary rows have an empty `Signal`: historical recovery **never sends alerts
+or flips the current holding**.
 
 ---
 
@@ -212,7 +240,8 @@ Every check is appended to `src/monitor_log.csv`:
 
 | Column | Description |
 |---|---|
-| `Timestamp` | Date and time of the check in ET (America/Toronto) |
+| `Timestamp` | Live check time, or exchange session time for an opening/closing record, in ET (America/Toronto) |
+| `Observation` | `LIVE` quote check, daily `OPEN`, or daily `CLOSE` |
 | `Price_XST` | XST.TO closing price (CAD) |
 | `Price_XQQ` | XQQ.TO closing price (CAD) |
 | `Delta_$` | Price difference in CAD |
@@ -263,6 +292,8 @@ The Windows setup script, all-day loop, local git-sync code, desktop popup, and
 their dependencies have been removed. Old generated local logs are ignored
 and are not used by the dashboard. The Actions command is
 `python -m src.monitor --once`; it rejects execution outside Actions.
+The separate `python -m src.monitor --session-boundaries` step performs
+historical Open/Close recovery and also only runs in Actions.
 
 ### Optional development validation
 
