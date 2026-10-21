@@ -1,0 +1,4 @@
+pandas
+yfinance
+pytz
+exchange-calendars>=4,<5

@@ -87,10 +87,11 @@ These are not the latest quotes at the time a delayed workflow happens to run.
   with its actual closing time rather than 16:00.
 - The opening record is eligible once the market opens. Closing recovery waits
   at least 15 minutes after the close to allow daily prices to be published.
-- Every workflow run rechecks the last **30 calendar days**. Missing records
-  are backfilled, and later vendor corrections update the same boundary record
-  instead of creating duplicates. The additional 22:15 UTC retry is 18:15 EDT
-  or 17:15 EST.
+- Workflow runs fetch Yahoo daily prices only when an eligible boundary record
+  is missing. At or after 22:15 UTC, the workflow also rechecks the last **30
+  calendar days** once to pick up provider corrections, updating the same
+  boundary record rather than creating duplicates. The additional 22:15 UTC
+  retry is 18:15 EDT or 17:15 EST.
 - If Yahoo data is missing, the workflow reports an error and later runs retry.
   Valid recovered rows are still committed. A provider outage or a dropped
   GitHub run can delay availability; this is not an exact-time delivery guarantee.
@@ -263,6 +264,7 @@ src/
   refresh_asymmetric_theory.py — Builds asymmetric theory CSV/PNG/DOCX artifacts
   historical_asymmetric_theory.docx — Asymmetric theory report
 requirements.txt        — Python dependencies
+requirements-monitor.txt — Price monitor dependencies
 ```
 
 ---

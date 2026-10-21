@@ -10,7 +10,7 @@ import smtplib
 import argparse
 import math
 import tempfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from email.mime.text import MIMEText
 import pandas as pd
 import yfinance as yf
@@ -48,6 +48,7 @@ ENV_COST_XQQ = _parse_optional_float(os.getenv("LAST_SWITCH_COST_XQQ"))
 MARKET_TZ = pytz.timezone("America/Toronto")
 SESSION_LOOKBACK_DAYS = 30
 CLOSE_PUBLICATION_DELAY = timedelta(minutes=15)
+BOUNDARY_CORRECTION_TIME_UTC = time(22, 15)
 
 
 def normalize_holding(holding: str | None) -> str:
@@ -352,6 +353,23 @@ def record_session_boundaries(now: datetime | None = None) -> None:
     if not expected:
         return
 
+    rows = read_log_rows()
+    positions = {
+        (row["Timestamp"], row["Observation"]): index
+        for index, row in enumerate(rows) if row["Observation"] in ("OPEN", "CLOSE")
+    }
+    correction_check = now.astimezone(pytz.UTC).time() >= BOUNDARY_CORRECTION_TIME_UTC
+    expected_to_check = expected if correction_check else [
+        item for item in expected
+        if (
+            item[3].strftime("%Y-%m-%d %H:%M:%S %Z"),
+            item[1],
+        ) not in positions
+    ]
+    if not expected_to_check:
+        print("Session opening/closing prices are already up to date.")
+        return
+
     histories = {}
     for ticker in TICKERS:
         history = yf.Ticker(ticker).history(
@@ -369,14 +387,9 @@ def record_session_boundaries(now: datetime | None = None) -> None:
             raise ValueError(f"Yahoo returned duplicate daily sessions for {ticker}.")
         histories[ticker] = history
 
-    rows = read_log_rows()
-    positions = {
-        (row["Timestamp"], row["Observation"]): index
-        for index, row in enumerate(rows) if row["Observation"] in ("OPEN", "CLOSE")
-    }
     changed = False
     missing = []
-    for session_date, observation, field, timestamp in expected:
+    for session_date, observation, field, timestamp in expected_to_check:
         prices = {}
         for ticker, history in histories.items():
             value = history.at[session_date, field] if session_date in history.index else None

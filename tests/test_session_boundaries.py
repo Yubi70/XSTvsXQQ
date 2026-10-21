@@ -145,13 +145,25 @@ class TestSessionBoundaries(unittest.TestCase):
         self.assertEqual(len([row for row in rows if row["Observation"] == "OPEN"]), 1)
 
     def test_later_provider_correction_updates_boundary_without_duplicate(self):
-        now = toronto_time("2026-10-20 17:00")
-        monitor.record_session_boundaries(now)
+        monitor.record_session_boundaries(toronto_time("2026-10-20 17:00"))
         self.clients["XST.TO"].history.return_value.loc[:, "Close"] = 76.25
-        monitor.record_session_boundaries(now)
+        monitor.record_session_boundaries(toronto_time("2026-10-20 18:15"))
         rows = self.rows()
         self.assertEqual(len(rows), 2)
         self.assertEqual(float(rows[-1]["Price_XST"]), 76.25)
+
+    def test_complete_boundaries_skip_yahoo_until_daily_correction_check(self):
+        monitor.record_session_boundaries(toronto_time("2026-10-20 17:00"))
+        for client in self.clients.values():
+            client.history.assert_called_once()
+
+        monitor.record_session_boundaries(toronto_time("2026-10-20 17:30"))
+        for client in self.clients.values():
+            client.history.assert_called_once()
+
+        monitor.record_session_boundaries(toronto_time("2026-10-20 18:15"))
+        for client in self.clients.values():
+            self.assertEqual(client.history.call_count, 2)
 
     def test_live_append_upgrades_legacy_header_without_losing_data(self):
         self.log.write_text(

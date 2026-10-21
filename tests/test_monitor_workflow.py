@@ -11,8 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class TestMonitorWorkflow(unittest.TestCase):
     def test_boundary_recovery_runs_after_live_check_and_before_persistence(self):
         workflow = (ROOT / ".github/workflows/monitor.yml").read_text(encoding="utf-8")
+        self.assertIn('cron: "*/30 13-21 * * 1-5"', workflow)
         self.assertIn('cron: "15 22 * * 1-5"', workflow)
         self.assertIn("python -m src.monitor --session-boundaries", workflow)
+        self.assertIn("fetch-depth: 1", workflow)
+        self.assertIn("requirements-monitor.txt", workflow)
+        self.assertIn("cache: pip", workflow)
+        self.assertIn("git rebase origin/main", workflow)
         self.assertLess(workflow.index("Run price check"), workflow.index("Record session opening"))
         self.assertLess(workflow.index("Record session opening"), workflow.index("Commit and push"))
         self.assertEqual(
