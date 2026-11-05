@@ -657,8 +657,8 @@ def render_switch_history_tab() -> None:
     )
     st.caption(
         "Switching advantage = switching value minus each alternative; positive favors switching. "
-        f"Latest prices: XST ${prices['XST']:.2f} at {timestamps['XST']} ET; "
-        f"XQQ ${prices['XQQ']:.2f} at {timestamps['XQQ']} ET. "
+        f"Latest prices: XST {prices['XST']:.2f} CAD at {timestamps['XST']} ET; "
+        f"XQQ {prices['XQQ']:.2f} CAD at {timestamps['XQQ']} ET. "
         "These normalized values are not actual account balances."
     )
 
