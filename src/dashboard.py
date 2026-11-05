@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 if __package__:
     from . import github_data
+    from .switch_comparison import compare_since_first_switch
     from .spread import (
         SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
         SWITCH_DOWN_THRESHOLD_PCT as SWITCH_DOWN_THRESHOLD,
@@ -19,6 +20,7 @@ if __package__:
     )
 else:
     import github_data
+    from switch_comparison import compare_since_first_switch
     from spread import (
         SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
         SWITCH_DOWN_THRESHOLD_PCT as SWITCH_DOWN_THRESHOLD,
@@ -619,6 +621,45 @@ def render_switch_history_tab() -> None:
         "Cash added = purchase cost minus sale proceeds, before fees. "
         "Positive means extra cash required; negative means cash left over. This is not a gain or loss. "
         "Append future confirmed trades without replacing earlier entries; monitor signals do not confirm executions."
+    )
+    st.subheader("Comparison since first switch")
+    ordered = sorted(history, key=lambda trade: pd.Timestamp(trade["switched_at"]))
+    last_switch = pd.Timestamp(ordered[-1]["switched_at"])
+    prices = {}
+    timestamps = {}
+    for ticker in ("XST", "XQQ"):
+        price, timestamp = get_latest_price_snapshot(f"Price_{ticker}")
+        if price is None or pd.isna(timestamp) or timestamp < last_switch:
+            st.info("Waiting for both ETF prices at or after the latest recorded switch to compare strategies.")
+            return
+        prices[ticker] = price
+        timestamps[ticker] = pd.Timestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+    try:
+        comparison = compare_since_first_switch(history, prices)
+    except ValueError as error:
+        st.warning(str(error))
+        return
+    st.caption(
+        f"Starting {ordered[0]['switched_at']} with the first sale proceeds invested equally in each strategy. "
+        "Your switches compound the recorded sale/buy prices, reinvesting all capital with fractional shares. "
+        "Cash additions and withdrawals are excluded, not counted as profit. "
+        "The 50/50 portfolio is split once and never rebalanced. "
+        "Price returns only; dividends, fees and taxes are excluded."
+    )
+    st.dataframe(
+        pd.DataFrame(comparison),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            column: st.column_config.NumberColumn(format="%.2f")
+            for column in comparison[0] if column != "Strategy"
+        },
+    )
+    st.caption(
+        "Switching advantage = switching value minus each alternative; positive favors switching. "
+        f"Latest prices: XST ${prices['XST']:.2f} at {timestamps['XST']} ET; "
+        f"XQQ ${prices['XQQ']:.2f} at {timestamps['XQQ']} ET. "
+        "These normalized values are not actual account balances."
     )
 
 

@@ -171,6 +171,27 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertFalse(tab.dataframe)
         self.assertTrue(any("No switch history" in info.value for info in tab.info))
 
+    def test_history_comparison_shows_four_equal_capital_strategies(self):
+        from tests.test_switch_comparison import HISTORY
+        self.responses[github_data.STATE_PATH] = json.dumps({
+            **STATE, "switch_history": HISTORY,
+        })
+        self.responses[github_data.LOG_PATH] = (
+            "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal\n"
+            "2026-11-05 11:35:00 EST,70,66,4,5.9,\n"
+        )
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tab = next(tab for tab in app.tabs if tab.label == "Switch History")
+        self.assertFalse(tab.error)
+        comparison = tab.dataframe[1].value
+        self.assertEqual(list(comparison["Strategy"]), [
+            "Your switches (equal capital)", "XQQ only", "XST only", "50% XQQ / 50% XST",
+        ])
+        self.assertEqual(list(comparison["Starting capital (CAD)"]), [439806] * 4)
+        self.assertAlmostEqual(comparison.iloc[1]["Current value (CAD)"], 438900)
+        self.assertEqual(comparison.iloc[0]["Switching advantage (CAD)"], 0)
+
     def test_new_switch_waits_for_post_trade_quotes(self):
         self.responses[github_data.STATE_PATH] = json.dumps({
             **STATE,

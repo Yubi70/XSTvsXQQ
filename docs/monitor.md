@@ -221,6 +221,18 @@ not the trade date.
 
 ### Keeping confirmed switch history
 
+The Switch History tab also compares all confirmed switches from the first
+recorded sale with XQQ-only, XST-only, and an unrebalanced 50/50 portfolio.
+Each strategy starts with the first sale proceeds. The switching strategy
+compounds each holding's sale/entry price ratio and the final latest/entry
+ratio; subsequent cash additions or withdrawals are excluded. Hypothetical
+fractional shares keep starting capital equal across strategies. These are
+price returns, excluding dividends, fees and taxes, not actual account balances.
+The table shows current value, gain/loss, return, and switching advantage over
+each alternative. Quotes must be at or after the latest recorded switch;
+missing starting quantities or discontinuous switch history produce a visible
+message instead of a fabricated comparison.
+
 Append each confirmed execution to `switch_history` in `src/position_state.json`,
 without replacing previous entries. Each entry has `switched_at` (Toronto local
 `YYYY-MM-DD HH:MM:SS`, or `YYYY-MM-DD` when the time is unknown), `sold_ticker`,
