@@ -228,7 +228,9 @@ compounds each holding's sale/entry price ratio and the final latest/entry
 ratio; subsequent cash additions or withdrawals are excluded. Hypothetical
 fractional shares keep starting capital equal across strategies. These are
 price returns, excluding dividends, fees and taxes, not actual account balances.
-The table shows current value, gain/loss, return, and switching advantage over
+The table includes initial XQQ/XST prices for each strategy (both for 50/50,
+and only the first purchased ETF for the switching strategy). It also shows
+current value, gain/loss, return, and switching advantage over
 each alternative. Quotes must be at or after the latest recorded switch;
 missing starting quantities or discontinuous switch history produce a visible
 message instead of a fabricated comparison.

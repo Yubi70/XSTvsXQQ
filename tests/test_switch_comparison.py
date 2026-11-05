@@ -18,6 +18,14 @@ HISTORY = [
 
 
 class TestSwitchComparison(unittest.TestCase):
+    def test_initial_prices_match_each_strategy_at_the_first_switch(self):
+        rows = compare_since_first_switch(HISTORY[::-1], {"XST": 70, "XQQ": 66})
+        xqq_entry = 439806 / 6650
+        expected = [(None, 62.86), (xqq_entry, None), (None, 62.86), (xqq_entry, 62.86)]
+        for row, (xqq, xst) in zip(rows, expected):
+            self.assertEqual(row["Initial XQQ price (CAD)"], xqq)
+            self.assertEqual(row["Initial XST price (CAD)"], xst)
+
     def test_exact_equal_capital_results_and_cash_neutrality(self):
         prices = {"XST": 70, "XQQ": 66}
         rows = compare_since_first_switch(HISTORY[::-1], prices)
