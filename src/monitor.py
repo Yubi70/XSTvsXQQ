@@ -18,6 +18,12 @@ import pytz
 import exchange_calendars as xcals
 
 from src.github_data import validate_position_state
+from src.spread import (
+    SWITCH_DOWN_THRESHOLD_PCT,
+    SWITCH_UP_THRESHOLD_PCT,
+    holding_delta,
+    switch_signal,
+)
 
 SMTP_SENDER     = os.getenv("SMTP_SENDER")
 SMTP_PASSWORD   = os.getenv("SMTP_PASSWORD")
@@ -26,8 +32,6 @@ ALERT_RECIPIENTS = [r.strip() for r in os.getenv("ALERT_RECIPIENT", "").split(",
 TICKERS = ["XST.TO", "XQQ.TO"]
 LOG_PATH = os.path.join(os.path.dirname(__file__), "monitor_log.csv")
 LOG_FIELDS = ["Timestamp", "Price_XST", "Price_XQQ", "Delta_$", "Delta_%", "Signal", "Observation"]
-SWITCH_UP_THRESHOLD_PCT = 11.5    # XST -> XQQ when delta >= +11.5%
-SWITCH_DOWN_THRESHOLD_PCT = 7.0   # XQQ -> XST when delta <= -7.0%
 STATE_PATH = os.path.join(os.path.dirname(__file__), "position_state.json")
 VALID_HOLDINGS = {"XST", "XQQ"}
 DEFAULT_HOLDING = os.getenv("START_HOLDING", "XQQ").strip().upper()
@@ -427,6 +431,8 @@ def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
     if not SMTP_SENDER or not SMTP_PASSWORD or not ALERT_RECIPIENTS:
         print("  [WARN] Email not configured — skipping email alert.")
         return
+    holding = "XQQ" if signal == "XQQ HIGH vs XST" else "XST"
+    other = opposite_holding(holding)
     subject = f"Switch Signal: {signal}"
     body = (
         f"XST vs XQQ Monitor — Switch Alert\n"
@@ -434,7 +440,7 @@ def send_email(signal: str, xst: float, xqq: float, delta_pct: float) -> None:
         f"Signal  : {signal}\n"
         f"XST.TO  : ${xst}\n"
         f"XQQ.TO  : ${xqq}\n"
-        f"Delta   : {delta_pct:+.1f}%\n\n"
+        f"Delta ({holding} - {other}, average-price basis): {delta_pct:+.1f}%\n\n"
         f"Consider rebalancing your position.\n"
     )
     msg = MIMEText(body)
@@ -464,13 +470,21 @@ def run_check() -> None:
     result = compute_delta(prices)
     position_pnl = compute_position_pnl(result, holding, state)
     raw_signal = result["Signal"]
-    result["Signal"] = filter_actionable_signal(raw_signal, holding)
+    relative_delta = (
+        holding_delta(result["Delta_%"], holding)
+        if result["Delta_%"] is not None else None
+    )
+    relative_abs = (
+        holding_delta(result["Delta_$"], holding)
+        if result["Delta_$"] is not None else None
+    )
+    result["Signal"] = switch_signal(relative_delta, holding)
     row = {"Timestamp": ts, **result}
     write_log(row)
 
     print(f"  XST.TO : {result['Price_XST']}")
     print(f"  XQQ.TO : {result['Price_XQQ']}")
-    print(f"  Delta  : {result['Delta_$']} CAD  ({result['Delta_%']}%)")
+    print(f"  Delta ({holding} - {opposite_holding(holding)}): {relative_abs} CAD  ({relative_delta}%)")
     if position_pnl["Status"] == "NO COST":
         print(f"  Position P/L ({holding}): set cost_basis in the GitHub position state to track win/loss.")
     elif position_pnl["Status"] == "NO PRICE":
@@ -482,9 +496,9 @@ def run_check() -> None:
         )
     if raw_signal and raw_signal != "DATA ERROR" and not result["Signal"]:
         print(f"  Threshold reached ({raw_signal}) but ignored because current holding is {holding}.")
-    if result["Signal"]:
+    if result["Signal"] and result["Signal"] != "DATA ERROR":
         print(f"  *** SIGNAL: {result['Signal']} ***")
-        send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], result["Delta_%"])
+        send_email(result["Signal"], result["Price_XST"], result["Price_XQQ"], relative_delta)
         new_holding = opposite_holding(holding)
         state["holding"] = new_holding
         new_price_key = _price_key_for_holding(new_holding)

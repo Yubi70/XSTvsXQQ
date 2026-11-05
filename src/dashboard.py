@@ -12,15 +12,23 @@ import plotly.graph_objects as go
 import streamlit as st
 if __package__:
     from . import github_data
+    from .spread import (
+        SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
+        SWITCH_DOWN_THRESHOLD_PCT as SWITCH_DOWN_THRESHOLD,
+        holding_delta, switch_signal, switch_threshold,
+    )
 else:
     import github_data
+    from spread import (
+        SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
+        SWITCH_DOWN_THRESHOLD_PCT as SWITCH_DOWN_THRESHOLD,
+        holding_delta, switch_signal, switch_threshold,
+    )
 try:
     from streamlit_autorefresh import st_autorefresh
 except ImportError:
     st_autorefresh = None
 
-SWITCH_UP_THRESHOLD = 11.5
-SWITCH_DOWN_THRESHOLD = 7.0
 REFRESH_SECONDS = 30 * 60
 MARKET_TIMEZONE = "America/Toronto"
 DEFAULT_SWITCH_INPUTS = {
@@ -166,6 +174,20 @@ def render_tendency(label: str, change: float, unit_suffix: str, threshold: floa
 
 def render_live_monitor_tab() -> None:
     st.caption(data_status)
+    try:
+        holding = load_position_state()["holding"]
+    except github_data.RemoteDataError as error:
+        st.error(str(error))
+        return
+    other = "XQQ" if holding == "XST" else "XST"
+    direction = holding_delta(1.0, holding)
+    threshold = switch_threshold(holding)
+    st.caption(
+        f"Current holding: {holding}. Delta = {holding} - {other}, divided by the average price. "
+        f"Switch to {other} when holding-relative delta reaches +{threshold:.1f}%. "
+        "All live-chart and table deltas use this current orientation, including older rows. "
+        "Stored logs and historical theory keep the fixed XST - XQQ convention."
+    )
 
     if not valid_df.empty:
         today_start = valid_df["Timestamp"].max().floor('D')
@@ -177,7 +199,7 @@ def render_live_monitor_tab() -> None:
 
             render_tendency(
                 "Day delta tendency",
-                float(last_row["Delta_%"]) - float(prev_close_row["Delta_%"]),
+                direction * (float(last_row["Delta_%"]) - float(prev_close_row["Delta_%"])),
                 " pts",
                 0.05,
             )
@@ -202,11 +224,11 @@ def render_live_monitor_tab() -> None:
     if latest is not None:
         col1.metric("XST.TO", f"${float(latest['Price_XST']):.2f}")
         col2.metric("XQQ.TO", f"${float(latest['Price_XQQ']):.2f}")
-        delta_val = float(latest["Delta_%"])
+        delta_val = holding_delta(float(latest["Delta_%"]), holding)
         col3.metric("Delta %", f"{delta_val:+.2f}%")
         col4.metric("Last updated", str(latest["Timestamp"]).split(".")[0])
 
-        signal = str(latest["Signal"]).strip()
+        signal = switch_signal(delta_val, holding)
         if signal and signal not in ("", "nan"):
             st.error(f"SWITCH SIGNAL: {signal}", icon="🚨")
         else:
@@ -276,7 +298,7 @@ def render_live_monitor_tab() -> None:
         filtered_valid_df = valid_df
 
     st.divider()
-    st.subheader("Delta % over time")
+    st.subheader(f"Delta % over time ({holding} - {other})")
     if filtered_valid_df.empty:
         st.info("No valid data available for chart yet.")
     view = filtered_valid_df
@@ -284,21 +306,19 @@ def render_live_monitor_tab() -> None:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=view["Timestamp"],
-        y=view["Delta_%"],
+        y=view["Delta_%"] * direction,
         mode="lines+markers",
         name="Delta %",
         line=dict(color="#1f77b4", width=1.8),
         marker=dict(size=3),
     ))
-    fig.add_hline(y=SWITCH_UP_THRESHOLD, line_dash="dash", line_color="red",
-                  annotation_text=f"+{SWITCH_UP_THRESHOLD}% -> switch to XQQ")
-    fig.add_hline(y=-SWITCH_DOWN_THRESHOLD, line_dash="dash", line_color="green",
-                  annotation_text=f"-{SWITCH_DOWN_THRESHOLD}% -> switch to XST")
+    fig.add_hline(y=threshold, line_dash="dash", line_color="red",
+                  annotation_text=f"+{threshold}% -> switch to {other}")
     fig.add_hline(y=0, line_color="gray", line_width=0.8)
     fig.update_layout(
         height=420,
         margin=dict(l=0, r=0, t=20, b=0),
-        yaxis_title="Delta %",
+        yaxis_title=f"Delta % ({holding} - {other})",
         xaxis_title="Timestamp (ET)",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -339,6 +359,8 @@ def render_live_monitor_tab() -> None:
     st.divider()
     st.subheader("Recent log entries")
     recent = filtered_df.tail(50).sort_values("Timestamp", ascending=False).copy()
+    recent["Delta_%"] = recent["Delta_%"] * direction
+    recent["Delta_$"] = recent["Delta_$"] * direction
     recent["Price_XST"] = recent["Price_XST"].apply(
         lambda x: "" if pd.isna(x) else f"${x:.2f}"
     )

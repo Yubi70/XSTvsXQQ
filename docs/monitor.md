@@ -21,11 +21,18 @@ Approximately every **30 minutes** during market hours, the workflow:
 3. Logs the result to `src/monitor_log.csv`
 4. If the delta reaches the directional thresholds, sends a **switch signal**
 
-Delta formula used by the monitor:
+Delta displayed by Live Monitor and used for actionable alerts:
 
 ```
-Delta_% = ((Price_XST - Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) * 100
+Delta_% = ((Price_held - Price_other) / ((Price_XST + Price_XQQ) / 2)) * 100
 ```
+
+While holding XQQ, this is XQQ minus XST, so delta is negative when XQQ is
+cheaper. Switching holding reverses the live metric, daily delta tendency,
+chart, and recent-table dollar/percentage spreads. The entire live view uses
+the current holding's orientation, including older observations. Stored CSV
+deltas and historical theory remain fixed XST minus XQQ for compatibility;
+recorded log signals remain the signals that actually occurred.
 
 ---
 
@@ -35,8 +42,14 @@ A signal is triggered when:
 
 | Signal | Condition |
 |---|---|
-| `XST HIGH vs XQQ` | Delta is ≥ +11.5% — consider selling XST, buying XQQ |
-| `XQQ HIGH vs XST` | Delta is ≤ -7.0% — consider selling XQQ, buying XST |
+| `XST HIGH vs XQQ` | Holding XST, XST-minus-XQQ delta is ≥ +11.5% — consider selling XST, buying XQQ |
+| `XQQ HIGH vs XST` | Holding XQQ, XQQ-minus-XST delta is ≥ +7.0% — consider selling XQQ, buying XST |
+
+These are the same economic thresholds as the fixed-log +11.5% / -7.0%
+rules, now expressed relative to the holding. A negative holding-relative
+delta does not trigger a switch. Email and collector output identify the
+orientation explicitly. The live signal is evaluated for the current holding,
+not copied from an older observation's alert.
 
 When a signal fires, an **email alert** is sent to all configured recipients.
 The one-shot cloud collector waits for the send attempt before exiting.
@@ -115,10 +128,10 @@ The collector does not load `.env` at all. `SMTP_PASSWORD` is a Gmail App
 Password, and `ALERT_RECIPIENT` accepts comma-separated email addresses.
 Never put credentials in the position file or commit them to the repository.
 
-To change the signal threshold, edit `src/monitor.py`:
+To change the shared dashboard and alert thresholds, edit `src/spread.py`:
 ```python
 SWITCH_UP_THRESHOLD_PCT = 11.5   # XST -> XQQ
-SWITCH_DOWN_THRESHOLD_PCT = 7.0  # XQQ -> XST
+SWITCH_DOWN_THRESHOLD_PCT = 7.0  # XQQ -> XST, positive holding-relative delta
 ```
 
 If cost values are provided, each check prints whether your current holding is **WINNING** or **LOSING**:

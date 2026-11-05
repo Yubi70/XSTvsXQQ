@@ -3,6 +3,7 @@ import io
 import json
 import smtplib
 import tempfile
+from email import message_from_string
 from contextlib import redirect_stderr
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from src import monitor
+from src.spread import holding_delta, switch_signal, switch_threshold
 
 
 class TestMonitor(unittest.TestCase):
@@ -165,6 +167,78 @@ class TestMonitor(unittest.TestCase):
             with self.subTest(holding=holding, prices=prices):
                 result = monitor.compute_delta(prices)
                 self.assertEqual(monitor.filter_actionable_signal(result["Signal"], holding), expected)
+
+    def test_holding_relative_alert_thresholds(self):
+        for holding, canonical, expected in (
+            ("XST", 11.4, ""), ("XST", 11.5, "XST HIGH vs XQQ"),
+            ("XST", -7.0, ""), ("XQQ", 5.5, ""),
+            ("XQQ", -6.9, ""), ("XQQ", -7.0, "XQQ HIGH vs XST"),
+            ("XQQ", -7.1, "XQQ HIGH vs XST"),
+        ):
+            with self.subTest(holding=holding, canonical=canonical):
+                relative = holding_delta(canonical, holding)
+                self.assertEqual(switch_signal(relative, holding), expected)
+        self.assertEqual(switch_threshold("XST"), 11.5)
+        self.assertEqual(switch_threshold("XQQ"), 7.0)
+        self.assertEqual(holding_delta(5.5, "XQQ"), -5.5)
+        self.assertEqual(switch_signal(None, "XQQ"), "DATA ERROR")
+        with self.assertRaises(ValueError):
+            holding_delta(1, "OTHER")
+
+    @patch("src.monitor.is_within_collection_window", return_value=True)
+    @patch("src.monitor.fetch_prices", return_value={"XST.TO": 60.0, "XQQ.TO": 80.0})
+    @patch("src.monitor.send_email")
+    @patch("src.monitor.load_state", return_value={"holding": "XQQ", "cost_basis": {}})
+    @patch("src.monitor.write_log")
+    @patch("src.monitor.save_state")
+    def test_xqq_alert_uses_positive_relative_delta_but_log_stays_canonical(
+        self, save, write, load, email, prices, window
+    ):
+        monitor.run_check()
+        email.assert_called_once_with("XQQ HIGH vs XST", 60, 80, 28.6)
+        self.assertEqual(write.call_args.args[0]["Delta_%"], -28.6)
+        self.assertEqual(write.call_args.args[0]["Delta_$"], -20)
+        self.assertEqual(write.call_args.args[0]["Signal"], "XQQ HIGH vs XST")
+        save.assert_called_once()
+
+    @patch("src.monitor.is_within_collection_window", return_value=True)
+    @patch("src.monitor.fetch_prices", return_value={"XST.TO": None, "XQQ.TO": 80.0})
+    @patch("src.monitor.send_email")
+    @patch("src.monitor.load_state", return_value={"holding": "XQQ", "cost_basis": {}})
+    @patch("src.monitor.write_log")
+    @patch("src.monitor.save_state")
+    def test_missing_prices_do_not_alert_or_flip_holding(
+        self, save, write, load, email, prices, window
+    ):
+        monitor.run_check()
+        self.assertEqual(write.call_args.args[0]["Signal"], "DATA ERROR")
+        email.assert_not_called()
+        save.assert_not_called()
+
+    @patch("src.monitor.is_within_collection_window", return_value=True)
+    @patch("src.monitor.fetch_prices", return_value={"XST.TO": 69.23, "XQQ.TO": 65.53})
+    @patch("src.monitor.send_email")
+    @patch("src.monitor.load_state", return_value={"holding": "XQQ", "cost_basis": {}})
+    @patch("src.monitor.write_log")
+    @patch("src.monitor.save_state")
+    def test_negative_xqq_delta_does_not_send_switch_alert(
+        self, save, write, load, email, prices, window
+    ):
+        monitor.run_check()
+        self.assertEqual(write.call_args.args[0]["Signal"], "")
+        email.assert_not_called()
+        save.assert_not_called()
+
+    @patch("src.monitor.SMTP_SENDER", "sender@example.com")
+    @patch("src.monitor.SMTP_PASSWORD", "test-password")
+    @patch("src.monitor.ALERT_RECIPIENTS", ["recipient@example.com"])
+    @patch("src.monitor.smtplib.SMTP_SSL")
+    def test_xqq_email_labels_delta_orientation(self, smtp):
+        monitor.send_email("XQQ HIGH vs XST", 60, 80, 28.6)
+        server = smtp.return_value.__enter__.return_value
+        message = message_from_string(server.sendmail.call_args.args[2])
+        body = message.get_payload(decode=True).decode(message.get_content_charset())
+        self.assertIn("Delta (XQQ - XST, average-price basis): +28.6%", body)
 
     @patch("src.monitor.yf.download")
     def test_fetch_prices_retries_when_one_ticker_is_missing(self, mock_download):

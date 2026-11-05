@@ -60,9 +60,13 @@ Install dependencies with `pip install -r requirements.txt`, then run
 `python -m unittest discover -s tests`.
 
 ## Monitor Delta Formula
-The live monitor uses a symmetric percentage spread based on the average of XST and XQQ prices:
+The live dashboard and alerts use a holding-relative percentage spread:
 
-Delta_% = ((Price_XST - Price_XQQ) / ((Price_XST + Price_XQQ) / 2)) * 100
+Delta_% = ((Price_held - Price_other) / ((Price_XST + Price_XQQ) / 2)) * 100
+
+While holding XQQ, delta is XQQ minus XST (negative when XQQ is cheaper).
+Alerts trigger at +7% for XQQ or +11.5% for XST. Persisted logs and
+historical theory retain the fixed XST-minus-XQQ convention.
 
 Details: [docs/monitor.md](docs/monitor.md)
 

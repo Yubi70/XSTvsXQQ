@@ -1,4 +1,6 @@
 import json
+import base64
+import struct
 import importlib
 import sys
 import unittest
@@ -73,6 +75,58 @@ class TestRemoteDashboard(unittest.TestCase):
         self.mock_read.assert_any_call(github_data.LOG_PATH)
         self.mock_read.assert_any_call(github_data.STATE_PATH)
         self.assertTrue(any("75.00" in str(metric.value) for metric in app.metric))
+
+    def test_live_delta_follows_current_holding_and_refreshes_orientation(self):
+        self.responses[github_data.STATE_PATH] = json.dumps({**STATE, "holding": "XQQ"})
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        live = app.tabs[0]
+        self.assertEqual(next(metric.value for metric in live.metric if metric.label == "Delta %"), "-5.70%")
+        recent = live.dataframe[0].value
+        self.assertEqual(recent.iloc[0]["Delta_%"], "-5.70%")
+        self.assertEqual(recent.iloc[0]["Delta_$"], "$-4.00")
+        chart = json.loads(live.get("plotly_chart")[0].proto.spec)
+        y = chart["data"][0]["y"]
+        if isinstance(y, dict):
+            values = struct.unpack("<2d", base64.b64decode(y["bdata"]))
+        else:
+            values = tuple(y)
+        self.assertEqual(values, (-2.9, -5.7))
+        self.assertIn("XQQ - XST", chart["layout"]["yaxis"]["title"]["text"])
+        self.assertEqual(
+            [shape["y0"] for shape in chart["layout"]["shapes"]], [7, 0]
+        )
+        self.responses[github_data.STATE_PATH] = json.dumps(STATE)
+        next(button for button in app.button if button.label == "Refresh from GitHub").click()
+        app.run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertEqual(next(metric.value for metric in app.tabs[0].metric if metric.label == "Delta %"), "+5.70%")
+
+    def test_live_signal_uses_current_holding_not_old_recorded_alert(self):
+        self.responses[github_data.LOG_PATH] = (
+            "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal\n"
+            "2026-10-20 10:30:00 EDT,60,80,-20,-28.6,XQQ HIGH vs XST\n"
+        )
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertFalse(app.tabs[0].error)
+        self.responses[github_data.STATE_PATH] = json.dumps({**STATE, "holding": "XQQ"})
+        next(button for button in app.button if button.label == "Refresh from GitHub").click()
+        app.run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertTrue(any("XQQ HIGH vs XST" in error.value for error in app.tabs[0].error))
+
+    def test_xqq_daily_delta_tendency_is_inverted(self):
+        self.responses[github_data.STATE_PATH] = json.dumps({**STATE, "holding": "XQQ"})
+        self.responses[github_data.LOG_PATH] = (
+            "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal\n"
+            "2026-10-19 16:00:00 EDT,70,68,2,2.9,\n"
+            "2026-10-20 10:30:00 EDT,72,68,4,5.7,\n"
+        )
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tendency = next(item.value for item in app.tabs[0].markdown if "Day delta tendency" in item.value)
+        self.assertIn("Down (-2.80 pts", tendency)
 
     def test_history_retains_old_switch_and_exact_trade_cash_difference(self):
         self.responses[github_data.STATE_PATH] = json.dumps({
