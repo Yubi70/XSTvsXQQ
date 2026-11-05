@@ -11,7 +11,8 @@
     {
       "switched_at": "2026-04-24",
       "sold_ticker": "XQQ",
-      "sold_price": 68.29,
+      "sold_quantity": 6650,
+      "sold_price": 66.13624060150376,
       "bought_ticker": "XST",
       "bought_price": 62.86
     },
