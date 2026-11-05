@@ -184,13 +184,15 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertFalse(app.exception)
         tab = next(tab for tab in app.tabs if tab.label == "Switch History")
         self.assertFalse(tab.error)
-        comparison = tab.dataframe[1].value
-        self.assertEqual(list(comparison["Strategy"]), [
-            "Your switches (equal capital)", "XQQ only", "XST only", "50% XQQ / 50% XST",
-        ])
-        self.assertEqual(list(comparison["Starting capital (CAD)"]), [10000] * 4)
-        self.assertAlmostEqual(comparison.iloc[1]["Current value (CAD)"], 10000 * 66 / HISTORY[0]["sold_price"])
-        self.assertEqual(comparison.iloc[0]["Switching advantage (CAD)"], 0)
+        markup = next(item.value for item in tab.markdown if 'id="switch-comparison-table"' in item.value)
+        for strategy in ("Your switches", "XQQ only", "XST only", "50% XQQ / 50% XST"):
+            self.assertIn(f"<td>{strategy}</td>", markup)
+        for column in ("Strategy", "Initial XQQ", "Initial XST", "Value", "Gain / loss", "Return", "Switch advantage"):
+            self.assertIn(f"<th>{column}</th>", markup)
+        self.assertIn(f"${10000 * 66 / HISTORY[0]['sold_price']:,.2f}", markup)
+        self.assertIn("$+0.00 (+0.00%)", markup)
+        self.assertNotIn("(CAD)", markup)
+        self.assertIn("table-layout:fixed", markup)
         self.assertTrue(any("hypothetical 10,000 CAD" in caption.value for caption in tab.caption))
 
     def test_new_switch_waits_for_post_trade_quotes(self):

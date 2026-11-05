@@ -232,7 +232,11 @@ price returns, excluding dividends, fees and taxes, not actual account balances.
 The table includes initial XQQ/XST prices for each strategy (both for 50/50,
 and only the first purchased ETF for the switching strategy). It also shows
 current value, gain/loss, return, and switching advantage over
-each alternative. Quotes must be at or after the latest recorded switch;
+each alternative. The comparison uses a wrapping, full-width table with short
+headers and a single CAD currency note. Switch advantage includes dollars and
+a percentage relative to each alternative's current value (not a percentage-point
+return difference). Numeric values remain available in the CSV download.
+Quotes must be at or after the latest recorded switch;
 discontinuous switch history produces a visible
 message instead of a fabricated comparison.
 

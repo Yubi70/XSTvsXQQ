@@ -646,17 +646,54 @@ def render_switch_history_tab() -> None:
         "The 50/50 portfolio is split once and never rebalanced. "
         "Price returns only; dividends, fees and taxes are excluded."
     )
-    st.dataframe(
-        pd.DataFrame(comparison),
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            column: st.column_config.NumberColumn(format="%.2f")
-            for column in comparison[0] if column != "Strategy"
-        },
+    display_rows = []
+    for row in comparison:
+        display_rows.append({
+            "Strategy": (
+                "Your switches" if row["Strategy"] == "Your switches (equal capital)"
+                else row["Strategy"]
+            ),
+            "Initial XQQ": (
+                f"${row['Initial XQQ price (CAD)']:.2f}"
+                if row["Initial XQQ price (CAD)"] is not None else "-"
+            ),
+            "Initial XST": (
+                f"${row['Initial XST price (CAD)']:.2f}"
+                if row["Initial XST price (CAD)"] is not None else "-"
+            ),
+            "Value": f"${row['Current value (CAD)']:,.2f}",
+            "Gain / loss": f"${row['Gain / loss (CAD)']:+,.2f}",
+            "Return": f"{row['Return (%)']:+.2f}%",
+            "Switch advantage": (
+                f"${row['Switching advantage (CAD)']:+,.2f} "
+                f"({row['Switching advantage (%)']:+.2f}%)"
+            ),
+        })
+    comparison_html = pd.DataFrame(display_rows).to_html(
+        index=False, border=0, table_id="switch-comparison-table", escape=True,
+    )
+    st.markdown(
+        "<style>"
+        "#switch-comparison-table {width:100%; table-layout:fixed; font-size:0.85rem;}"
+        "#switch-comparison-table th, #switch-comparison-table td "
+        "{white-space:normal; overflow-wrap:anywhere; padding:0.45rem 0.3rem; text-align:right;}"
+        "#switch-comparison-table th:first-child, #switch-comparison-table td:first-child "
+        "{width:20%; text-align:left;}"
+        "</style>" + comparison_html,
+        unsafe_allow_html=True,
+    )
+    st.download_button(
+        "Download comparison as CSV",
+        pd.DataFrame(comparison).rename(
+            columns=lambda column: column.replace(" (CAD)", "")
+        ).to_csv(index=False),
+        file_name="switch_comparison.csv", mime="text/csv",
     )
     st.caption(
-        "Switching advantage = switching value minus each alternative; positive favors switching. "
+        "All dollar amounts are CAD. Each strategy starts with $10,000. "
+        "Switch advantage = switching value minus each alternative; "
+        "its percentage is this difference divided by the alternative's current value, "
+        "not a percentage-point return difference. Positive favors switching. "
         f"Latest prices: XST {prices['XST']:.2f} CAD at {timestamps['XST']} ET; "
         f"XQQ {prices['XQQ']:.2f} CAD at {timestamps['XQQ']} ET. "
         "These normalized values are not actual account balances."

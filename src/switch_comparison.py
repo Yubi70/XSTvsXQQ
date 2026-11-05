@@ -40,6 +40,7 @@ def compare_since_first_switch(history: list[dict], prices: dict[str, float]) ->
             "Gain / loss (CAD)": capital * (factor - 1),
             "Return (%)": (factor - 1) * 100,
             "Switching advantage (CAD)": capital * (switched_factor - factor),
+            "Switching advantage (%)": (switched_factor / factor - 1) * 100,
         }
         for name, factor, tickers in (
             ("Your switches (equal capital)", switched_factor, (first["bought_ticker"],)),

@@ -38,6 +38,7 @@ class TestSwitchComparison(unittest.TestCase):
             self.assertAlmostEqual(row["Gain / loss (CAD)"], expected - 10000)
             self.assertAlmostEqual(row["Return (%)"], (expected / 10000 - 1) * 100)
             self.assertAlmostEqual(row["Switching advantage (CAD)"], switched - expected)
+            self.assertAlmostEqual(row["Switching advantage (%)"], (switched / expected - 1) * 100)
         changed = [{**trade, "bought_quantity": 1000000} for trade in HISTORY]
         self.assertEqual(compare_since_first_switch(changed, prices), rows)
         without_quantities = [
