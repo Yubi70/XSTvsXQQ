@@ -74,6 +74,88 @@ class TestRemoteDashboard(unittest.TestCase):
         self.mock_read.assert_any_call(github_data.STATE_PATH)
         self.assertTrue(any("75.00" in str(metric.value) for metric in app.metric))
 
+    def test_history_retains_old_switch_and_exact_trade_cash_difference(self):
+        self.responses[github_data.STATE_PATH] = json.dumps({
+            **STATE,
+            "switch_history": [
+                {
+                    "switched_at": "2026-04-24",
+                    "sold_ticker": "XQQ", "sold_price": 68.29,
+                    "bought_ticker": "XST", "bought_price": 62.86,
+                },
+                {
+                    "switched_at": "2026-11-05 11:30:00",
+                    "sold_ticker": "XST", "sold_quantity": 7000, "sold_price": 69.23,
+                    "bought_ticker": "XQQ", "bought_quantity": 7400, "bought_price": 65.53,
+                },
+            ],
+        })
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertFalse(app.error)
+        tab = next(tab for tab in app.tabs if tab.label == "Switch History")
+        history = tab.dataframe[0].value
+        self.assertEqual(len(history), 2)
+        latest = history.iloc[0]
+        self.assertEqual(latest["Switch time (Toronto)"], "2026-11-05 11:30:00")
+        self.assertEqual(latest["Sold"], "XST")
+        self.assertEqual(latest["Shares sold"], 7000)
+        self.assertEqual(latest["Sale price (CAD)"], 69.23)
+        self.assertEqual(latest["Sale proceeds (CAD)"], 484610)
+        self.assertEqual(latest["Bought"], "XQQ")
+        self.assertEqual(latest["Shares bought"], 7400)
+        self.assertEqual(latest["Buy price (CAD)"], 65.53)
+        self.assertEqual(latest["Purchase cost (CAD)"], 484922)
+        self.assertEqual(latest["Cash added (CAD)"], 312)
+        self.assertEqual(history.iloc[1]["Switch time (Toronto)"], "2026-04-24")
+        self.assertTrue(history.iloc[1][["Shares sold", "Shares bought", "Cash added (CAD)"]].isna().all())
+
+    def test_history_without_records_shows_empty_state(self):
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tab = next(tab for tab in app.tabs if tab.label == "Switch History")
+        self.assertFalse(tab.dataframe)
+        self.assertTrue(any("No switch history" in info.value for info in tab.info))
+
+    def test_new_switch_waits_for_post_trade_quotes(self):
+        self.responses[github_data.STATE_PATH] = json.dumps({
+            **STATE,
+            "holding": "XQQ",
+            "cost_basis": {"XST": 69.23, "XQQ": 65.53},
+            "last_switch_date": "2026-10-20",
+            "last_switch_at": "2026-10-20 11:30:00",
+            "approx_amount_cad": 484922,
+        })
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertNotIn("Switched return", {metric.label for metric in app.metric})
+        self.assertTrue(any("Waiting for price observations" in info.value for info in app.info))
+        self.responses[github_data.LOG_PATH] += (
+            "2026-10-20 11:35:00 EDT,69.23,65.53,3.7,5.49,\n"
+        )
+        next(button for button in app.button if button.label == "Refresh from GitHub").click()
+        app.run(timeout=30)
+        self.assertFalse(app.exception)
+        metrics = {metric.label: metric.value for metric in app.metric}
+        self.assertEqual(metrics["Switched return"], "+0.00%")
+        self.assertEqual(metrics["No-switch return"], "+0.00%")
+        self.assertEqual(metrics["Switch edge ($)"], "$+0.00")
+        comparison = next(
+            chart for element in app.get("plotly_chart")
+            if (chart := json.loads(element.proto.spec))["data"][0].get("name") == "Switched (XQQ)"
+        )
+        for trace in comparison["data"]:
+            self.assertEqual(len(trace["x"]), 1)
+            self.assertIn("11:35:00", trace["x"][0])
+
+    def test_invalid_history_keeps_repair_link_in_history_tab(self):
+        self.responses[github_data.STATE_PATH] = json.dumps({**STATE, "switch_history": {}})
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tab = next(tab for tab in app.tabs if tab.label == "Switch History")
+        self.assertTrue(any("switch_history" in error.value for error in tab.error))
+        self.assertTrue(tab.get("link_button"))
+
     def test_network_failure_displays_an_error_instead_of_stale_local_data(self):
         self.mock_read.side_effect = github_data.RemoteDataError("GitHub is unavailable")
         app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)

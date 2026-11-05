@@ -146,7 +146,7 @@ the workflow from GitHub after the edit is committed.
 
 ## Dashboard Tabs (Web Page)
 
-The Streamlit dashboard (`src/dashboard.py`) has five tabs:
+The Streamlit dashboard (`src/dashboard.py`) has six tabs:
 
 1. **Live Monitor**
   - Real-time monitor view with delta charts, price charts, and recent log entries.
@@ -164,11 +164,19 @@ The Streamlit dashboard (`src/dashboard.py`) has five tabs:
   - GitHub sign-in and repository permissions protect editing. There is no
     dashboard write token and no temporary dashboard save.
 
-3. **The Historical Theory**
+3. **Switch History**
+  - Shows recorded switches newest first, with Toronto-local execution dates/times,
+    sold/bought ETFs, quantities, prices, proceeds, purchase cost, and cash added.
+  - Positive cash added means the purchase required extra cash; negative means
+    cash was left over. Cash contributions are not investment returns. Fees are excluded.
+  - Older switches retain known prices without inventing missing quantities or times.
+  - Reads the `switch_history` list from the same GitHub position state. Existing
+    history is preserved by collector state updates; signals do not confirm real trades.
+4. **The Historical Theory**
   - Historical strategy results and comparison charts.
-4. **Historical Asymmetric Theory**
+5. **Historical Asymmetric Theory**
   - Directional-threshold strategy results and downloadable report.
-5. **Documentation**
+6. **Documentation**
   - Renders this file (`docs/monitor.md`) as formatted Markdown directly in the web page.
   - Updates automatically whenever the file is changed.
 
@@ -197,6 +205,27 @@ a positive number. When the last two fields are absent, the dashboard retains
 its existing default inputs. The collector preserves these extra fields when
 updating holding/costs; `updated_at` is the collector's last state-write time,
 not the trade date.
+
+### Keeping confirmed switch history
+
+Append each confirmed execution to `switch_history` in `src/position_state.json`,
+without replacing previous entries. Each entry has `switched_at` (Toronto local
+`YYYY-MM-DD HH:MM:SS`, or `YYYY-MM-DD` when the time is unknown), `sold_ticker`,
+`sold_price`, `bought_ticker`, and `bought_price`. Optional `sold_quantity` and
+`bought_quantity` must be positive numbers when known; omit them or use `null`
+when unknown. Tickers must be opposite ETFs (`XST` and `XQQ`).
+
+Also update the current `holding`, both `cost_basis` prices, `last_switch_date`,
+`last_switch_at` (when known), and `approx_amount_cad` to the new purchase cost.
+Remove an old `last_switch_at` if the new execution time is unknown.
+The Since Last Switch tab waits for quotes at or after the new switch before
+displaying returns. Its dollar edge compares equal starting capital, not actual
+share counts, and excludes contributions and fees. Actual trade totals and the
+cash difference are displayed separately in Switch History.
+
+History changes require a GitHub commit followed by **Refresh from GitHub**.
+The collector preserves the list but never fabricates confirmed executions from
+automatic signals. Only publish trade details you intend to make public.
 
 The repository and these inputs are public. Do not enter account numbers,
 credentials, or other private information. No Streamlit secrets are needed.

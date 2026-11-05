@@ -69,6 +69,51 @@ class TestGitHubData(unittest.TestCase):
             "https://github.com/Yubi70/XSTvsXQQ/edit/main/src/position_state.json",
         )
 
+    def test_switch_history_preserves_known_and_unknown_quantities(self):
+        state = {
+            "holding": "XQQ",
+            "cost_basis": {"XST": 69.23, "XQQ": 65.53},
+            "last_switch_at": "2026-11-05 11:30:00",
+            "switch_history": [
+                {
+                    "switched_at": "2026-04-24",
+                    "sold_ticker": "XQQ", "sold_price": 68.29,
+                    "bought_ticker": "XST", "bought_price": 62.86,
+                },
+                {
+                    "switched_at": "2026-11-05 11:30:00",
+                    "sold_ticker": "XST", "sold_price": 69.23, "sold_quantity": 7000,
+                    "bought_ticker": "XQQ", "bought_price": 65.53, "bought_quantity": 7400,
+                },
+            ],
+        }
+        self.assertEqual(github_data.validate_position_state(state), state)
+
+    @patch("src.github_data.read_text")
+    def test_invalid_history_displays_explicit_data_error(self, read):
+        trade = {
+            "switched_at": "2026-11-05 11:30:00",
+            "sold_ticker": "XST", "sold_price": 69.23, "sold_quantity": 7000,
+            "bought_ticker": "XQQ", "bought_price": 65.53, "bought_quantity": 7400,
+        }
+        histories = [None, {}, [None]]
+        for field, value in (
+            ("switched_at", None), ("switched_at", "invalid"),
+            ("switched_at", "2026-11-05 11:30:00+00:00"),
+            ("sold_ticker", "OTHER"), ("bought_ticker", "XST"),
+            ("sold_price", None), ("bought_price", -1),
+            ("sold_quantity", True), ("bought_quantity", float("nan")),
+            ("sold_quantity", "7000"), ("bought_quantity", 0),
+        ):
+            histories.append([{**trade, field: value}])
+        for history in histories:
+            with self.subTest(history=history):
+                read.return_value = json.dumps({
+                    "holding": "XQQ", "cost_basis": {}, "switch_history": history,
+                })
+                with self.assertRaisesRegex(github_data.RemoteDataError, "switch_history"):
+                    github_data.read_position_state()
+
 
 if __name__ == "__main__":
     unittest.main()

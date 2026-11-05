@@ -1,10 +1,29 @@
 {
-  "holding": "XST",
+  "holding": "XQQ",
   "cost_basis": {
-    "XST": 62.86,
-    "XQQ": 68.29
+    "XST": 69.23,
+    "XQQ": 65.53
   },
-  "last_switch_date": "2026-04-24",
-  "approx_amount_cad": 440020.0,
-  "updated_at": "2026-11-03 09:34:55 EST"
+  "last_switch_date": "2026-11-05",
+  "last_switch_at": "2026-11-05 11:30:00",
+  "approx_amount_cad": 484922.0,
+  "switch_history": [
+    {
+      "switched_at": "2026-04-24",
+      "sold_ticker": "XQQ",
+      "sold_price": 68.29,
+      "bought_ticker": "XST",
+      "bought_price": 62.86
+    },
+    {
+      "switched_at": "2026-11-05 11:30:00",
+      "sold_ticker": "XST",
+      "sold_quantity": 7000,
+      "sold_price": 69.23,
+      "bought_ticker": "XQQ",
+      "bought_quantity": 7400,
+      "bought_price": 65.53
+    }
+  ],
+  "updated_at": "2026-11-05 11:30:00 EST"
 }

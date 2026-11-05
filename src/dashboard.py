@@ -441,6 +441,18 @@ def render_since_switch_tab() -> None:
         st.info("No latest price snapshot yet for one or both tickers.")
         return
 
+    comparison_start = pd.to_datetime(
+        state.get("last_switch_at") or state_switch_date_text, errors="coerce"
+    )
+    if pd.notna(comparison_start) and (
+        pd.isna(current_now_ts)
+        or pd.isna(previous_now_ts)
+        or current_now_ts < comparison_start
+        or previous_now_ts < comparison_start
+    ):
+        st.info("Waiting for price observations at or after the last switch before calculating returns.")
+        return
+
     switched_ret = (current_now / float(current_entry)) - 1.0
     no_switch_ret = (previous_now / float(previous_entry)) - 1.0
     edge = switched_ret - no_switch_ret
@@ -467,6 +479,10 @@ def render_since_switch_tab() -> None:
         f"switched value ${switched_value_amt:,.2f} vs no-switch ${no_switch_value_amt:,.2f} (edge {edge_cad:+,.2f} CAD). "
     )
     st.caption(
+        "This is an equal-capital comparison, not an actual share-count valuation. "
+        "Trade cash additions or withdrawals are shown separately in Switch History; fees are excluded."
+    )
+    st.caption(
         f"Normalized to selling 1 share of {previous_ticker} at ${float(previous_entry):.2f} on switch day: "
         f"switched path is {extra_cad:+.4f} CAD versus no-switch."
     )
@@ -484,8 +500,7 @@ def render_since_switch_tab() -> None:
     else:
         st.info("Switched and no-switch paths are currently tied.")
 
-    switch_date_text = str(effective_state.get("last_switch_date", "")).strip()
-    switch_ts = pd.to_datetime(switch_date_text, errors="coerce") if switch_date_text else pd.NaT
+    switch_ts = comparison_start
     if pd.notna(switch_ts):
         since_df = valid_df[valid_df["Timestamp"] >= switch_ts].copy()
         if not since_df.empty:
@@ -517,6 +532,72 @@ def render_since_switch_tab() -> None:
             st.plotly_chart(comp_fig, use_container_width=True)
         else:
             st.info("No valid rows available after last_switch_date yet.")
+
+
+def render_switch_history_tab() -> None:
+    st.subheader("Switch History")
+    st.caption(
+        "Recorded trades, newest first. Times are Toronto local time. "
+        "Older entries retain known switch prices; unrecorded quantities and times are not estimated."
+    )
+    st.link_button("Edit switch history on GitHub", github_data.STATE_EDIT_URL)
+    try:
+        state = load_position_state()
+    except github_data.RemoteDataError as error:
+        st.error(str(error))
+        return
+
+    history = state.get("switch_history", [])
+    if not history:
+        st.info("No switch history recorded yet. Add confirmed trades to switch_history in position_state.json.")
+        return
+
+    rows = []
+    for trade in sorted(history, key=lambda item: pd.Timestamp(item["switched_at"]), reverse=True):
+        sold_quantity = trade.get("sold_quantity")
+        bought_quantity = trade.get("bought_quantity")
+        proceeds = (
+            round(sold_quantity * trade["sold_price"], 2)
+            if sold_quantity is not None else None
+        )
+        purchase_cost = (
+            round(bought_quantity * trade["bought_price"], 2)
+            if bought_quantity is not None else None
+        )
+        cash_added = (
+            round(purchase_cost - proceeds, 2)
+            if proceeds is not None and purchase_cost is not None else None
+        )
+        rows.append({
+            "Switch time (Toronto)": trade["switched_at"],
+            "Sold": trade["sold_ticker"],
+            "Shares sold": sold_quantity,
+            "Sale price (CAD)": trade["sold_price"],
+            "Sale proceeds (CAD)": proceeds,
+            "Bought": trade["bought_ticker"],
+            "Shares bought": bought_quantity,
+            "Buy price (CAD)": trade["bought_price"],
+            "Purchase cost (CAD)": purchase_cost,
+            "Cash added (CAD)": cash_added,
+        })
+
+    st.dataframe(
+        pd.DataFrame(rows),
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            column: st.column_config.NumberColumn(format="%.2f")
+            for column in (
+                "Sale price (CAD)", "Sale proceeds (CAD)", "Buy price (CAD)",
+                "Purchase cost (CAD)", "Cash added (CAD)",
+            )
+        },
+    )
+    st.caption(
+        "Cash added = purchase cost minus sale proceeds, before fees. "
+        "Positive means extra cash required; negative means cash left over. This is not a gain or loss. "
+        "Append future confirmed trades without replacing earlier entries; monitor signals do not confirm executions."
+    )
 
 
 SRC_PATH = Path(__file__).parent
@@ -1031,10 +1112,11 @@ def render_docs_tab() -> None:
     st.markdown(content)
 
 
-tab_live, tab_since_switch, tab_theory, tab_asym, tab_docs = st.tabs(
+tab_live, tab_since_switch, tab_history, tab_theory, tab_asym, tab_docs = st.tabs(
     [
         "Live Monitor",
         "Since Last Switch",
+        "Switch History",
         "The Historical Theory",
         "Historical Asymmetric Theory",
         "Documentation",
@@ -1045,6 +1127,9 @@ with tab_live:
 
 with tab_since_switch:
     render_since_switch_tab()
+
+with tab_history:
+    render_switch_history_tab()
 
 with tab_theory:
     render_theory_tab()

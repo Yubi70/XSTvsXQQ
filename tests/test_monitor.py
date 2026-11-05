@@ -121,6 +121,27 @@ class TestMonitor(unittest.TestCase):
         with self.assertRaises(smtplib.SMTPException):
             monitor.send_email("XST HIGH vs XQQ", 70.0, 60.0, 15.4)
 
+    def test_saving_state_keeps_confirmed_switch_history_unchanged(self):
+        state = {
+            "holding": "XST",
+            "cost_basis": {"XST": 69.23, "XQQ": 65.53},
+            "switch_history": [{
+                "switched_at": "2026-11-05 11:30:00",
+                "sold_ticker": "XST", "sold_quantity": 7000, "sold_price": 69.23,
+                "bought_ticker": "XQQ", "bought_quantity": 7400, "bought_price": 65.53,
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "position_state.json"
+            with patch("src.monitor.STATE_PATH", str(state_path)):
+                monitor.save_state(state)
+                loaded = monitor.load_state()
+                loaded["holding"] = "XQQ"
+                loaded["cost_basis"] = {"XST": 70, "XQQ": 66}
+                monitor.save_state(loaded)
+            saved = json.loads(state_path.read_text())
+        self.assertEqual(saved["switch_history"], state["switch_history"])
+
     @patch("src.monitor.is_within_collection_window", return_value=True)
     @patch("src.monitor.fetch_prices", return_value={"XST.TO": 80.0, "XQQ.TO": 60.0})
     @patch("src.monitor.send_email", side_effect=smtplib.SMTPException("mail unavailable"))

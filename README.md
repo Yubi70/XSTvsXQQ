@@ -70,6 +70,7 @@ Details: [docs/monitor.md](docs/monitor.md)
 The web dashboard includes:
 - `Live Monitor` tab for real-time prices/delta/logs
 - `Since Last Switch` tab for switched vs no-switch comparison, a GitHub edit link, and `Switch edge ($)` output
+- `Switch History` tab for recorded trades, quantities, execution prices, and cash added or left over before fees
 
 Worked example: see the **Dashboard Tabs (Web Page)** section in [docs/monitor.md](docs/monitor.md).
 

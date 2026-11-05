@@ -2,7 +2,7 @@
 
 import json
 import math
-from datetime import date
+from datetime import date, datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -66,4 +66,42 @@ def validate_position_state(state: object) -> dict:
             date.fromisoformat(state["last_switch_date"])
         except (TypeError, ValueError) as error:
             raise ValueError("The GitHub last_switch_date must use YYYY-MM-DD.") from error
+    if "last_switch_at" in state:
+        _validate_switch_time(state["last_switch_at"], "last_switch_at")
+    history = state.get("switch_history", [])
+    if not isinstance(history, list):
+        raise ValueError("The GitHub switch_history must be a list.")
+    for index, trade in enumerate(history):
+        prefix = f"switch_history[{index}]"
+        if not isinstance(trade, dict):
+            raise ValueError(f"The GitHub {prefix} must be an object.")
+        _validate_switch_time(trade.get("switched_at"), f"{prefix}.switched_at")
+        if (
+            trade.get("sold_ticker") not in ("XST", "XQQ")
+            or trade.get("bought_ticker") not in ("XST", "XQQ")
+            or trade["sold_ticker"] == trade["bought_ticker"]
+        ):
+            raise ValueError(f"The GitHub {prefix} must sell one ETF and buy the other.")
+        for field in ("sold_price", "bought_price", "sold_quantity", "bought_quantity"):
+            value = trade.get(field)
+            if field.endswith("_quantity") and value is None:
+                continue
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"The GitHub {prefix}.{field} must be a positive finite number.")
     return state
+
+
+def _validate_switch_time(value: object, name: str) -> None:
+    if not isinstance(value, str):
+        raise ValueError(f"The GitHub {name} must be a Toronto-local date or timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"The GitHub {name} must use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS.") from error
+    if parsed.tzinfo is not None or len(value) not in (10, 19):
+        raise ValueError(f"The GitHub {name} must be a Toronto-local date or timestamp.")
