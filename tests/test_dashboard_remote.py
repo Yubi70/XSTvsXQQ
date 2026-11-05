@@ -188,9 +188,10 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertEqual(list(comparison["Strategy"]), [
             "Your switches (equal capital)", "XQQ only", "XST only", "50% XQQ / 50% XST",
         ])
-        self.assertEqual(list(comparison["Starting capital (CAD)"]), [439806] * 4)
-        self.assertAlmostEqual(comparison.iloc[1]["Current value (CAD)"], 438900)
+        self.assertEqual(list(comparison["Starting capital (CAD)"]), [10000] * 4)
+        self.assertAlmostEqual(comparison.iloc[1]["Current value (CAD)"], 10000 * 66 / HISTORY[0]["sold_price"])
         self.assertEqual(comparison.iloc[0]["Switching advantage (CAD)"], 0)
+        self.assertTrue(any("hypothetical 10,000 CAD" in caption.value for caption in tab.caption))
 
     def test_new_switch_waits_for_post_trade_quotes(self):
         self.responses[github_data.STATE_PATH] = json.dumps({

@@ -223,7 +223,8 @@ not the trade date.
 
 The Switch History tab also compares all confirmed switches from the first
 recorded sale with XQQ-only, XST-only, and an unrebalanced 50/50 portfolio.
-Each strategy starts with the first sale proceeds. The switching strategy
+Each strategy starts with a hypothetical 10,000 CAD, independently of actual
+trade quantities and account amounts. The switching strategy
 compounds each holding's sale/entry price ratio and the final latest/entry
 ratio; subsequent cash additions or withdrawals are excluded. Hypothetical
 fractional shares keep starting capital equal across strategies. These are
@@ -232,7 +233,7 @@ The table includes initial XQQ/XST prices for each strategy (both for 50/50,
 and only the first purchased ETF for the switching strategy). It also shows
 current value, gain/loss, return, and switching advantage over
 each alternative. Quotes must be at or after the latest recorded switch;
-missing starting quantities or discontinuous switch history produce a visible
+discontinuous switch history produces a visible
 message instead of a fabricated comparison.
 
 Append each confirmed execution to `switch_history` in `src/position_state.json`,

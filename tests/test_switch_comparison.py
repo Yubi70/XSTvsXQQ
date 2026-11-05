@@ -29,28 +29,35 @@ class TestSwitchComparison(unittest.TestCase):
     def test_exact_equal_capital_results_and_cash_neutrality(self):
         prices = {"XST": 70, "XQQ": 66}
         rows = compare_since_first_switch(HISTORY[::-1], prices)
-        switched = 439806 * (69.23 / 62.86) * (66 / 65.53)
-        xqq = 6650 * 66
-        xst = 439806 / 62.86 * 70
+        switched = 10000 * (69.23 / 62.86) * (66 / 65.53)
+        xqq = 10000 / HISTORY[0]["sold_price"] * 66
+        xst = 10000 / 62.86 * 70
         for row, expected in zip(rows, (switched, xqq, xst, (xqq + xst) / 2)):
-            self.assertEqual(row["Starting capital (CAD)"], 439806)
+            self.assertEqual(row["Starting capital (CAD)"], 10000)
             self.assertAlmostEqual(row["Current value (CAD)"], expected)
-            self.assertAlmostEqual(row["Gain / loss (CAD)"], expected - 439806)
-            self.assertAlmostEqual(row["Return (%)"], (expected / 439806 - 1) * 100)
+            self.assertAlmostEqual(row["Gain / loss (CAD)"], expected - 10000)
+            self.assertAlmostEqual(row["Return (%)"], (expected / 10000 - 1) * 100)
             self.assertAlmostEqual(row["Switching advantage (CAD)"], switched - expected)
         changed = [{**trade, "bought_quantity": 1000000} for trade in HISTORY]
         self.assertEqual(compare_since_first_switch(changed, prices), rows)
+        without_quantities = [
+            {key: value for key, value in trade.items() if not key.endswith("_quantity")}
+            for trade in HISTORY
+        ]
+        self.assertEqual(compare_since_first_switch(without_quantities, prices), rows)
+        changed_sales = [{**trade, "sold_quantity": 1} for trade in HISTORY]
+        self.assertEqual(compare_since_first_switch(changed_sales, prices), rows)
 
     def test_one_switch_starts_with_equal_capital(self):
         first = HISTORY[0]
         rows = compare_since_first_switch([first], {"XST": 62.86, "XQQ": first["sold_price"]})
         for row in rows:
-            self.assertAlmostEqual(row["Current value (CAD)"], 439806)
+            self.assertAlmostEqual(row["Current value (CAD)"], 10000)
             self.assertAlmostEqual(row["Return (%)"], 0)
 
     def test_missing_and_discontinuous_history_and_bad_quotes_are_explicit(self):
         bad_histories = [
-            [], [{**HISTORY[0], "sold_quantity": None}],
+            [],
             [HISTORY[0], {**HISTORY[1], "sold_ticker": "XQQ"}],
         ]
         for history in bad_histories:

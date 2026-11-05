@@ -9,10 +9,7 @@ def compare_since_first_switch(history: list[dict], prices: dict[str, float]) ->
         raise ValueError("No confirmed switches are available for comparison.")
     trades = sorted(history, key=lambda trade: datetime.fromisoformat(trade["switched_at"]))
     first = trades[0]
-    quantity = first.get("sold_quantity")
-    if quantity is None:
-        raise ValueError("Set the first switch's sold quantity to establish equal starting capital.")
-    capital = quantity * first["sold_price"]
+    capital = 10000.0
     initial_prices = {
         first["sold_ticker"]: first["sold_price"],
         first["bought_ticker"]: first["bought_price"],

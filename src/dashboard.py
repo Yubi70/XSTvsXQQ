@@ -640,7 +640,7 @@ def render_switch_history_tab() -> None:
         st.warning(str(error))
         return
     st.caption(
-        f"Starting {ordered[0]['switched_at']} with the first sale proceeds invested equally in each strategy. "
+        f"Starting {ordered[0]['switched_at']} with a hypothetical 10,000 CAD invested in each strategy. "
         "Your switches compound the recorded sale/buy prices, reinvesting all capital with fractional shares. "
         "Cash additions and withdrawals are excluded, not counted as profit. "
         "The 50/50 portfolio is split once and never rebalanced. "
