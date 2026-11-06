@@ -163,6 +163,8 @@ The Streamlit dashboard (`src/dashboard.py`) has seven tabs:
 
 1. **Live Monitor**
   - Real-time monitor view with delta charts, price charts, and recent log entries.
+  - Daily XST/XQQ tendencies show the CAD change followed by its percentage
+    in parentheses, calculated against the previous close. Delta tendency stays in percentage points.
 2. **Since Last Switch**
   - Compares your actual switched path versus a no-switch path since your recorded switch date.
   - Uses the latest available price per ticker even when timestamps differ, so the section remains usable outside market hours.

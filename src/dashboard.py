@@ -7,6 +7,7 @@ Hosted on Streamlit Community Cloud.
 from io import StringIO
 from pathlib import Path
 
+import math
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -161,7 +162,10 @@ data_status = (
 )
 
 
-def render_tendency(label: str, change: float, unit_suffix: str, threshold: float) -> None:
+def render_tendency(
+    label: str, change: float, unit_suffix: str, threshold: float,
+    percentage_change: float | None = None,
+) -> None:
     if change > threshold:
         trend_icon, trend_text, trend_color = "▲", "Up", "#138A36"
     elif change < -threshold:
@@ -169,9 +173,10 @@ def render_tendency(label: str, change: float, unit_suffix: str, threshold: floa
     else:
         trend_icon, trend_text, trend_color = "▶", "Flat", "#666666"
 
+    percentage_text = f" ({percentage_change:+.2f}%)" if percentage_change is not None else ""
     st.markdown(
         f"<div style='font-size:1.02rem; font-weight:600; color:{trend_color};'>"
-        f"{label}: {trend_icon} {trend_text} ({change:+.2f}{unit_suffix} vs previous close)</div>",
+        f"{label}: {trend_icon} {trend_text} ({change:+.2f}{unit_suffix}{percentage_text} vs previous close)</div>",
         unsafe_allow_html=True,
     )
 
@@ -207,18 +212,17 @@ def render_live_monitor_tab() -> None:
                 " pts",
                 0.05,
             )
-            render_tendency(
-                "Day XST tendency",
-                float(last_row["Price_XST"]) - float(prev_close_row["Price_XST"]),
-                " CAD",
-                0.01,
-            )
-            render_tendency(
-                "Day XQQ tendency",
-                float(last_row["Price_XQQ"]) - float(prev_close_row["Price_XQQ"]),
-                " CAD",
-                0.01,
-            )
+            for ticker in ("XST", "XQQ"):
+                previous_price = float(prev_close_row[f"Price_{ticker}"])
+                current_price = float(last_row[f"Price_{ticker}"])
+                if not all(math.isfinite(price) and price > 0 for price in (previous_price, current_price)):
+                    st.warning(f"Day {ticker} tendency: cannot calculate with invalid current or previous close prices.")
+                    continue
+                change = current_price - previous_price
+                render_tendency(
+                    f"Day {ticker} tendency", change, " CAD", 0.01,
+                    change / previous_price * 100,
+                )
         else:
             st.info("Day tendencies: waiting for both today's data and previous close data.")
     else:

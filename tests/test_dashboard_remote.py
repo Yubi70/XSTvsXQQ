@@ -248,6 +248,37 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertTrue(any("not valid JSON" in error.value for error in app.error))
         self.assertTrue(app.get("link_button"))
 
+    def test_daily_price_tendencies_show_percentage_against_previous_close(self):
+        for xst, xqq, expected_xst, expected_xqq in (
+            (72, 69, "+2.00 CAD (+2.86%)", "+1.00 CAD (+1.47%)"),
+            (68, 67, "-2.00 CAD (-2.86%)", "-1.00 CAD (-1.47%)"),
+            (70, 68, "+0.00 CAD (+0.00%)", "+0.00 CAD (+0.00%)"),
+        ):
+            with self.subTest(xst=xst, xqq=xqq):
+                st.cache_data.clear()
+                self.responses[github_data.LOG_PATH] = (
+                    "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal\n"
+                    "2026-10-19 16:00:00 EDT,70,68,2,2.9,\n"
+                    f"2026-10-20 10:30:00 EDT,{xst},{xqq},2,2.9,\n"
+                )
+                app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+                self.assertFalse(app.exception)
+                markup = [item.value for item in app.tabs[0].markdown]
+                self.assertIn(expected_xst, next(text for text in markup if "Day XST tendency" in text))
+                self.assertIn(expected_xqq, next(text for text in markup if "Day XQQ tendency" in text))
+                self.assertNotIn("%", next(text for text in markup if "Day delta tendency" in text))
+
+    def test_daily_percentage_with_zero_previous_price_shows_warning(self):
+        self.responses[github_data.LOG_PATH] = (
+            "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal\n"
+            "2026-10-19 16:00:00 EDT,0,68,2,2.9,\n"
+            "2026-10-20 10:30:00 EDT,72,69,3,4.2,\n"
+        )
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertTrue(any("Day XST tendency: cannot calculate" in item.value for item in app.tabs[0].warning))
+        self.assertTrue(any("+1.00 CAD (+1.47%)" in item.value for item in app.tabs[0].markdown))
+
     def test_invalid_remote_log_displays_error(self):
         self.responses[github_data.LOG_PATH] = "wrong,columns\n1,2\n"
         app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
