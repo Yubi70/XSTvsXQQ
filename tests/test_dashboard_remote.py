@@ -254,6 +254,30 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertIn("missing columns", app.error[0].value)
 
+    def test_xlp_research_tab_shows_separate_cohorts_and_both_selectors(self):
+        app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tab = next(tab for tab in app.tabs if tab.label == "ETF Research")
+        self.assertFalse(tab.error)
+        markup = "\n".join(item.value for item in tab.markdown)
+        self.assertIn("research-usd-summary", markup)
+        self.assertIn("research-cad-summary", markup)
+        self.assertIn("no XLP/QQQ switches", markup)
+        self.assertTrue(any("different share denominations" in item.value.lower() for item in tab.warning))
+        app.selectbox(key="research_years").select(2)
+        app.selectbox(key="research_threshold").select(5)
+        app.run(timeout=30)
+        self.assertFalse(app.exception)
+        self.assertFalse(next(tab for tab in app.tabs if tab.label == "ETF Research").error)
+
+    def test_missing_research_snapshot_does_not_break_other_tabs(self):
+        with patch("src.research_dashboard.load_snapshot", side_effect=ValueError("Research snapshot missing")):
+            app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+        self.assertFalse(app.exception)
+        tab = next(tab for tab in app.tabs if tab.label == "ETF Research")
+        self.assertEqual(tab.error[0].value, "Research snapshot missing")
+        self.assertTrue(app.tabs[0].metric)
+
     def test_boundary_rows_and_live_signals_at_same_time_are_both_preserved(self):
         self.responses[github_data.LOG_PATH] = (
             "Timestamp,Price_XST,Price_XQQ,Delta_$,Delta_%,Signal,Observation\n"

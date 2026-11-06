@@ -159,7 +159,7 @@ the workflow from GitHub after the edit is committed.
 
 ## Dashboard Tabs (Web Page)
 
-The Streamlit dashboard (`src/dashboard.py`) has six tabs:
+The Streamlit dashboard (`src/dashboard.py`) has seven tabs:
 
 1. **Live Monitor**
   - Real-time monitor view with delta charts, price charts, and recent log entries.
@@ -189,7 +189,17 @@ The Streamlit dashboard (`src/dashboard.py`) has six tabs:
   - Historical strategy results and comparison charts.
 5. **Historical Asymmetric Theory**
   - Directional-threshold strategy results and downloadable report.
-6. **Documentation**
+6. **ETF Research**
+  - XLP/QQQ USD pilot and a separate XST/XQQ CAD reference, using the original
+    Nasdaq-relative raw-close +/-3% and +/-5% method, not live alert thresholds.
+  - Two-/five-year equity curves, premiums, switch logs, risk/performance
+    metrics, daily-return correlations, liquidity and downloadable daily histories.
+  - Uses a verified generated snapshot. Missing/inconsistent snapshots fail
+    visibly; stale snapshots warn. The dashboard does not download prices.
+  - See [research report](etf_replacement_research.md) for sources, coverage,
+    raw-price/split and same-close limitations. This research does not modify
+    holdings or alerts. Other candidates remain deferred.
+7. **Documentation**
   - Renders this file (`docs/monitor.md`) as formatted Markdown directly in the web page.
   - Updates automatically whenever the file is changed.
 

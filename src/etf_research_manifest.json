@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "pilot": "XLP",
+  "cutoff": "2026-11-05",
+  "requested_start": "2021-11-05",
+  "retrieved_at": "2026-11-06T12:34:49.547344+00:00",
+  "provider": "Yahoo Finance via yfinance 1.7.0; auto_adjust=False, actions=True",
+  "methodology": "Original method: premium = (staples Close - Nasdaq Close) / Nasdaq Close * 100; thresholds +/-3% and +/-5%; start in staples; switch only to the opposite ETF. Earn each day's return in the previous holding, then execute at that day's close. Initial capital 10,000 in each pair's own currency; fractional shares; unrebalanced 50/50 benchmark. No dividends, fees, slippage or taxes. Signals and executions at the same close are optimistic and not guaranteed executable.",
+  "limitations": "Raw share-price differences are not valuations. Share denominations and splits can dominate signals; Yahoo Close is not dividend-adjusted but is normally split-restated, not historical as-traded prices. No rebasing or reconstruction of as-traded prices is used. Zero-switch results are retained. USD XLP/QQQ does not test XLP against CAD-hedged XQQ; USD and CAD dollar results are separate. Correlations use daily returns, not price levels. Historical performance cannot establish the best future investment. Only XLP is analyzed; IYK, KXI, FSTA and VDC are deferred.",
+  "funds": {
+    "XLP": {
+      "currency": "USD",
+      "calendar": "XNYS",
+      "source": "https://www.ssga.com/us/en/intermediary/etfs/state-street-consumer-staples-select-sector-spdr-etf-xlp",
+      "description": "US S&P 500 consumer staples; inception 1998-12-16; gross expense ratio 0.08% (issuer checked 2026-11-06).",
+      "ticker": "XLP",
+      "first_session": "2021-11-05",
+      "last_session": "2026-11-05",
+      "rows": 1255,
+      "missing_sessions": [],
+      "split_events": [],
+      "large_close_moves": [],
+      "volume_sessions_30": 30,
+      "mean_share_volume_30": 15990763.333333334,
+      "mean_dollar_volume_30": 1388420606.8075817,
+      "volume_sessions_90": 90,
+      "mean_share_volume_90": 12235642.222222222,
+      "mean_dollar_volume_90": 1047743671.2107764
+    },
+    "QQQ": {
+      "currency": "USD",
+      "calendar": "XNYS",
+      "source": "https://www.invesco.com/qqq-etf/en/about.html",
+      "description": "US Nasdaq-100, USD; not equivalent to CAD-hedged XQQ.",
+      "ticker": "QQQ",
+      "first_session": "2021-11-05",
+      "last_session": "2026-11-05",
+      "rows": 1255,
+      "missing_sessions": [],
+      "split_events": [],
+      "large_close_moves": [],
+      "volume_sessions_30": 30,
+      "mean_share_volume_30": 42237340.0,
+      "mean_dollar_volume_30": 30145610295.602825,
+      "volume_sessions_90": 90,
+      "mean_share_volume_90": 38063968.88888889,
+      "mean_dollar_volume_90": 27101331522.515865
+    },
+    "XST.TO": {
+      "currency": "CAD",
+      "calendar": "XTSE",
+      "source": "https://www.blackrock.com/ca/investors/en/products/239840/ishares-sptsx-capped-consumer-staples-index-etf",
+      "description": "Canadian consumer staples reference.",
+      "ticker": "XST.TO",
+      "first_session": "2021-11-05",
+      "last_session": "2026-11-05",
+      "rows": 1255,
+      "missing_sessions": [],
+      "split_events": [
+        {
+          "date": "2021-12-30",
+          "ratio": 0.988
+        },
+        {
+          "date": "2024-08-09",
+          "ratio": 2.0
+        },
+        {
+          "date": "2024-12-30",
+          "ratio": 0.967
+        }
+      ],
+      "large_close_moves": [],
+      "volume_sessions_30": 30,
+      "mean_share_volume_30": 25940.0,
+      "mean_dollar_volume_30": 1718267.8923161824,
+      "volume_sessions_90": 90,
+      "mean_share_volume_90": 21716.666666666668,
+      "mean_dollar_volume_90": 1432593.5745196873
+    },
+    "XQQ.TO": {
+      "currency": "CAD",
+      "calendar": "XTSE",
+      "source": "https://www.blackrock.com/ca/investors/en/products/239698/ishares-nasdaq-100-index-etf-cadhedged-fund",
+      "description": "Nasdaq-100 CAD-hedged reference.",
+      "ticker": "XQQ.TO",
+      "first_session": "2021-11-05",
+      "last_session": "2026-11-05",
+      "rows": 1255,
+      "missing_sessions": [],
+      "split_events": [
+        {
+          "date": "2021-12-30",
+          "ratio": 0.965
+        },
+        {
+          "date": "2024-08-09",
+          "ratio": 3.0
+        }
+      ],
+      "large_close_moves": [],
+      "volume_sessions_30": 30,
+      "mean_share_volume_30": 406476.6666666667,
+      "mean_dollar_volume_30": 29651788.996073406,
+      "volume_sessions_90": 90,
+      "mean_share_volume_90": 236825.55555555556,
+      "mean_dollar_volume_90": 17079004.355121188
+    }
+  },
+  "samples": [
+    {
+      "pair": "XLP/QQQ",
+      "years": 5,
+      "start": "2021-11-05",
+      "end": "2026-11-05",
+      "sessions": 1255,
+      "daily_return_correlation": 0.2669946194709247,
+      "one_year_return_correlation": -0.2736369754986723,
+      "return_observations": 1254,
+      "one_year_observations": 252
+    },
+    {
+      "pair": "XLP/QQQ",
+      "years": 2,
+      "start": "2024-11-05",
+      "end": "2026-11-05",
+      "sessions": 502,
+      "daily_return_correlation": -0.029185321638502196,
+      "one_year_return_correlation": -0.2736369754986723,
+      "return_observations": 501,
+      "one_year_observations": 252
+    },
+    {
+      "pair": "XST.TO/XQQ.TO",
+      "years": 5,
+      "start": "2021-11-05",
+      "end": "2026-11-05",
+      "sessions": 1255,
+      "daily_return_correlation": 0.19217242617813876,
+      "one_year_return_correlation": -0.17899831998839397,
+      "return_observations": 1254,
+      "one_year_observations": 252
+    },
+    {
+      "pair": "XST.TO/XQQ.TO",
+      "years": 2,
+      "start": "2024-11-05",
+      "end": "2026-11-05",
+      "sessions": 503,
+      "daily_return_correlation": -0.0330359719007942,
+      "one_year_return_correlation": -0.17899831998839397,
+      "return_observations": 502,
+      "one_year_observations": 252
+    }
+  ],
+  "sha256": {
+    "src/etf_research_XLP_daily.csv": "5e77c1484b2fca9d107641d3e5156c5dd28edf3260c41fad9a92b14521a83e7c",
+    "src/etf_research_QQQ_daily.csv": "5ebd4c50562e3c5b34a6dc3e592cb9eeee5901f69110cda3a7a1d812dc1c0ef2",
+    "src/etf_research_XST_TO_daily.csv": "ff3310f288b8a56badf6b92023d04b410ebcc08db54be74c915f00a56dd08b87",
+    "src/etf_research_XQQ_TO_daily.csv": "869d03586b8e8fb333b9091b0d69822682d92a28ee7b83e2c16fbbb1d6a28865",
+    "src/etf_research_XLP_QQQ_5y_3pct_curve.csv": "6f0d708736c601d3048ad1de12a7721978fc865451e50f4367eb35f5f22dbd8f",
+    "src/etf_research_XLP_QQQ_5y_3pct_switches.csv": "52a25bb3ac8e07b6a3034d49df67f1f06ae807ccbae0c1b9e6c6a01784850c74",
+    "src/etf_research_XLP_QQQ_5y_5pct_curve.csv": "6f0d708736c601d3048ad1de12a7721978fc865451e50f4367eb35f5f22dbd8f",
+    "src/etf_research_XLP_QQQ_5y_5pct_switches.csv": "52a25bb3ac8e07b6a3034d49df67f1f06ae807ccbae0c1b9e6c6a01784850c74",
+    "src/etf_research_XLP_QQQ_2y_3pct_curve.csv": "f7578e56eaed27afcbbd0df8116fd8c65f787068c17758aed9784578fc0c30f0",
+    "src/etf_research_XLP_QQQ_2y_3pct_switches.csv": "52a25bb3ac8e07b6a3034d49df67f1f06ae807ccbae0c1b9e6c6a01784850c74",
+    "src/etf_research_XLP_QQQ_2y_5pct_curve.csv": "f7578e56eaed27afcbbd0df8116fd8c65f787068c17758aed9784578fc0c30f0",
+    "src/etf_research_XLP_QQQ_2y_5pct_switches.csv": "52a25bb3ac8e07b6a3034d49df67f1f06ae807ccbae0c1b9e6c6a01784850c74",
+    "src/etf_research_XST_TO_XQQ_TO_5y_3pct_curve.csv": "c559af57fa975eb3523b9412e58bdcd4e04d2e128e2398593771838f4b46df8d",
+    "src/etf_research_XST_TO_XQQ_TO_5y_3pct_switches.csv": "c18e7c3bd8c9c8c15a26cd7a2f229d072c33ee433d117a43e7f11b8724ad62db",
+    "src/etf_research_XST_TO_XQQ_TO_5y_5pct_curve.csv": "856e248a860ecf67c66b2fdc2616d091aff7508d53fa7b391c2743d5f852cf94",
+    "src/etf_research_XST_TO_XQQ_TO_5y_5pct_switches.csv": "5adb497388950b8f5ac65ead13916b8899ccf9c18b60bdf6850f89970d06db6a",
+    "src/etf_research_XST_TO_XQQ_TO_2y_3pct_curve.csv": "48a23ceaaca587bfff1cab1a682fbf9db5bde692faedf95620ebba980ec46d9b",
+    "src/etf_research_XST_TO_XQQ_TO_2y_3pct_switches.csv": "9fde52d088fc12c244c866e9718a1be3d81e75599b90eef47c04ba4ad2cfe2a8",
+    "src/etf_research_XST_TO_XQQ_TO_2y_5pct_curve.csv": "861a8165d5e055cd64cffb07c547e9ae10eee17674fdc6da9dc0f7310b77b70d",
+    "src/etf_research_XST_TO_XQQ_TO_2y_5pct_switches.csv": "acd99a045a125d7b347f85f2269ffe0bfc8209d5c11e6ece19f97e776f258ba9",
+    "src/etf_research_summary.csv": "92139c2f7d444598fd6e90c723395508b2e908ae8dc936b761d3329a77880b07",
+    "docs/etf_replacement_research.md": "9db424303f891f2a8ffe00bb2c86f3417bcc49b3f6588c6a93b3afc826bfcdc8"
+  }
+}

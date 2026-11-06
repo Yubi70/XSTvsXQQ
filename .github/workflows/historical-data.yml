@@ -30,6 +30,9 @@ jobs:
       - name: Refresh price history and derived data
         run: python -m src.refresh_price_history
 
+      - name: Refresh XLP research pilot
+        run: python -m src.etf_research
+
       - name: Commit updated data
         run: |
           git config user.name "github-actions[bot]"
@@ -45,7 +48,30 @@ jobs:
             src/real_switches_asym_last5y.png \
             src/real_switches_asym_last2y.png \
             src/switch_duration_asym_last5y.png \
-            src/historical_asymmetric_theory.docx
+            src/historical_asymmetric_theory.docx \
+            src/etf_research_XLP_daily.csv \
+            src/etf_research_QQQ_daily.csv \
+            src/etf_research_XST_TO_daily.csv \
+            src/etf_research_XQQ_TO_daily.csv \
+            src/etf_research_XLP_QQQ_5y_3pct_curve.csv \
+            src/etf_research_XLP_QQQ_5y_3pct_switches.csv \
+            src/etf_research_XLP_QQQ_5y_5pct_curve.csv \
+            src/etf_research_XLP_QQQ_5y_5pct_switches.csv \
+            src/etf_research_XLP_QQQ_2y_3pct_curve.csv \
+            src/etf_research_XLP_QQQ_2y_3pct_switches.csv \
+            src/etf_research_XLP_QQQ_2y_5pct_curve.csv \
+            src/etf_research_XLP_QQQ_2y_5pct_switches.csv \
+            src/etf_research_XST_TO_XQQ_TO_5y_3pct_curve.csv \
+            src/etf_research_XST_TO_XQQ_TO_5y_3pct_switches.csv \
+            src/etf_research_XST_TO_XQQ_TO_5y_5pct_curve.csv \
+            src/etf_research_XST_TO_XQQ_TO_5y_5pct_switches.csv \
+            src/etf_research_XST_TO_XQQ_TO_2y_3pct_curve.csv \
+            src/etf_research_XST_TO_XQQ_TO_2y_3pct_switches.csv \
+            src/etf_research_XST_TO_XQQ_TO_2y_5pct_curve.csv \
+            src/etf_research_XST_TO_XQQ_TO_2y_5pct_switches.csv \
+            src/etf_research_summary.csv \
+            src/etf_research_manifest.json \
+            docs/etf_replacement_research.md
           if git diff --cached --quiet; then
             echo "No updated data to commit."
           else

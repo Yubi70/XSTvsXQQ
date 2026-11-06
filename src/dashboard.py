@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 if __package__:
     from . import github_data
+    from .research_dashboard import render_research_tab
     from .switch_comparison import compare_since_first_switch
     from .spread import (
         SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
@@ -20,6 +21,7 @@ if __package__:
     )
 else:
     import github_data
+    from research_dashboard import render_research_tab
     from switch_comparison import compare_since_first_switch
     from spread import (
         SWITCH_UP_THRESHOLD_PCT as SWITCH_UP_THRESHOLD,
@@ -1212,13 +1214,14 @@ def render_docs_tab() -> None:
     st.markdown(content)
 
 
-tab_live, tab_since_switch, tab_history, tab_theory, tab_asym, tab_docs = st.tabs(
+tab_live, tab_since_switch, tab_history, tab_theory, tab_asym, tab_research, tab_docs = st.tabs(
     [
         "Live Monitor",
         "Since Last Switch",
         "Switch History",
         "The Historical Theory",
         "Historical Asymmetric Theory",
+        "ETF Research",
         "Documentation",
     ]
 )
@@ -1236,6 +1239,9 @@ with tab_theory:
 
 with tab_asym:
     render_asymmetric_tab()
+
+with tab_research:
+    render_research_tab()
 
 with tab_docs:
     render_docs_tab()

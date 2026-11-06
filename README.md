@@ -53,6 +53,17 @@ workflows enabled. Configure the email secrets in GitHub, not on a computer.
 See [monitor documentation](docs/monitor.md) for secret names, position fields,
 schedule limitations, and troubleshooting. No new Streamlit secrets are required.
 
+## XLP research pilot
+
+The **ETF Research** tab provides a separate XLP/QQQ USD pilot and an XST/XQQ
+CAD reference. It follows the original raw-close +/-3% and +/-5% switching
+method, not the live asymmetric alerts. Four daily histories, coverage/source
+metadata, curves, switch logs and a [research report](docs/etf_replacement_research.md)
+are generated with `python -m src.etf_research` and refreshed by the existing
+historical-data workflow. Results use hypothetical 10,000 starting capital,
+exclude dividends/costs, and explicitly flag raw share-price/split limitations.
+The live monitor and real holdings are not modified. Other candidates are deferred.
+
 ## Development and tests
 
 Development tools are optional; they are not needed to operate the hosted app.
