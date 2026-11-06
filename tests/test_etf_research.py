@@ -60,7 +60,7 @@ class TestResearchBacktest(unittest.TestCase):
         curve, switches = research.backtest(pair_frame([80, 81, 82], [100, 101, 102]), "S", "N", 3)
         self.assertTrue(switches.empty)
         self.assertEqual(list(switches.columns), research.SWITCH_COLUMNS)
-        pd.testing.assert_series_equal(curve["Switching"], curve["Staples only"], check_names=False)
+        pd.testing.assert_series_equal(curve["Switching"], curve["Defensive only"], check_names=False)
 
     def test_risk_metrics_and_invalid_inputs(self):
         dates = pd.Series(pd.date_range("2025-01-01", periods=3, freq="180D"))
@@ -92,7 +92,7 @@ class TestResearchBacktest(unittest.TestCase):
         ):
             with self.subTest(shape=bad.shape), self.assertRaises(ValueError):
                 research.validate_history(bad, start, cutoff)
-        metadata = research.quality_metadata("XLP", frame, start, cutoff)
+        metadata = research.quality_metadata("XUT.TO", frame, start, cutoff)
         self.assertEqual(metadata["split_events"], [{"date": "2026-11-04", "ratio": 2}])
         self.assertEqual(metadata["missing_sessions"], [])
         self.assertEqual(metadata["mean_share_volume_30"], 200)
@@ -100,12 +100,12 @@ class TestResearchBacktest(unittest.TestCase):
             provider = frame.set_index("Date")
             provider.index = provider.index.tz_localize("America/New_York")
             ticker.return_value.history.return_value = provider
-            actual = research.download_history("XLP", start, cutoff)
+            actual = research.download_history("XUT.TO", start, cutoff)
             self.assertEqual(actual["Date"].iloc[-1], cutoff)
             self.assertFalse(ticker.return_value.history.call_args.kwargs["auto_adjust"])
             ticker.return_value.history.return_value = provider.iloc[:0]
             with self.assertRaises(ValueError):
-                research.download_history("XLP", start, cutoff)
+                research.download_history("XUT.TO", start, cutoff)
 
     def test_cutoff_excludes_unfinished_session(self):
         self.assertEqual(
@@ -122,6 +122,10 @@ class TestResearchArtifacts(unittest.TestCase):
     def test_real_snapshot_hashes_schemas_and_independent_share_ledger(self):
         manifest, texts, summary = load_snapshot(ROOT)
         self.assertEqual(set(manifest["funds"]), set(research.FUNDS))
+        self.assertEqual(manifest["pilot"], "XUT")
+        self.assertEqual(manifest["schema_version"], 2)
+        self.assertEqual(set(manifest["funds"]), {"XUT.TO", "XST.TO", "XQQ.TO"})
+        self.assertEqual(set(summary["Currency"]), {"CAD"})
         self.assertEqual(len(summary), 32)
         for ticker in research.FUNDS:
             history = pd.read_csv(ROOT / "src" / research.history_name(ticker))
@@ -138,15 +142,15 @@ class TestResearchArtifacts(unittest.TestCase):
                     self.assertEqual(list(switches.columns), research.SWITCH_COLUMNS)
                     # Independent share ledger: execute trades, not compounded-return helper.
                     held_staples = True
-                    shares = 10000 / curve["Staples close"].iloc[0]
+                    shares = 10000 / curve["Defensive close"].iloc[0]
                     expected_dates = []
                     for row in curve.to_dict("records"):
-                        current_price = row["Staples close"] if held_staples else row["Nasdaq close"]
+                        current_price = row["Defensive close"] if held_staples else row["Nasdaq close"]
                         self.assertAlmostEqual(shares * current_price, row["Switching"], places=6)
-                        premium = (row["Staples close"] - row["Nasdaq close"]) / row["Nasdaq close"] * 100
+                        premium = (row["Defensive close"] - row["Nasdaq close"]) / row["Nasdaq close"] * 100
                         change = (held_staples and premium >= threshold) or (not held_staples and premium <= -threshold)
                         if change:
-                            next_price = row["Nasdaq close"] if held_staples else row["Staples close"]
+                            next_price = row["Nasdaq close"] if held_staples else row["Defensive close"]
                             shares = shares * current_price / next_price
                             held_staples = not held_staples
                             expected_dates.append(row["Date"])
@@ -171,9 +175,15 @@ class TestResearchArtifacts(unittest.TestCase):
                             (values[-1] - curve["50/50"].iloc[-1]) / 100,
                         )
                         self.assertEqual(record["Switches"], len(expected_dates) if record["Strategy"] == "Switching" else 0)
-                    if staples == "XLP":
-                        self.assertEqual(len(switches), 0)
-        self.assertIn("no XLP/QQQ switches", texts["docs/etf_replacement_research.md"])
+                    if switches.empty:
+                        pd.testing.assert_series_equal(curve["Switching"], curve["Defensive only"], check_names=False)
+        self.assertIn("# XUT replacement research", texts["docs/etf_replacement_research.md"])
+
+    def test_old_xlp_manifest_is_rejected(self):
+        manifest = {"schema_version": 1, "pilot": "XLP"}
+        with patch("pathlib.Path.read_text", return_value=json.dumps(manifest)):
+            with self.assertRaisesRegex(ValueError, "Unrecognized XUT"):
+                load_snapshot(ROOT)
 
     def test_missing_and_inconsistent_snapshot_is_explicit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -202,12 +212,12 @@ class TestResearchArtifacts(unittest.TestCase):
             for relative in manifest["sha256"]:
                 shutil.copyfile(ROOT / relative, root / relative)
             for relative, replacement, message in (
-                ("src/etf_research_summary.csv", "XLP/QQQ", "summary scenarios"),
-                ("src/etf_research_XLP_QQQ_5y_3pct_curve.csv", "Date,Close\n", "curve schema"),
+                ("src/etf_research_summary.csv", "XUT.TO/XQQ.TO", "summary scenarios"),
+                ("src/etf_research_XUT_TO_XQQ_TO_5y_3pct_curve.csv", "Date,Close\n", "curve schema"),
                 ("docs/etf_replacement_research.md", "Missing assessment\n", "report sections"),
             ):
                 original = (root / relative).read_text()
-                text = original.replace("XLP/QQQ", "Wrong/Pair") if replacement == "XLP/QQQ" else replacement
+                text = original.replace("XUT.TO/XQQ.TO", "Wrong/Pair") if replacement == "XUT.TO/XQQ.TO" else replacement
                 (root / relative).write_text(text)
                 manifest["sha256"][relative] = hashlib.sha256(text.encode()).hexdigest()
                 (root / "src/etf_research_manifest.json").write_text(json.dumps(manifest))

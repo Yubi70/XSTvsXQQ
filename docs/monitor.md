@@ -190,8 +190,10 @@ The Streamlit dashboard (`src/dashboard.py`) has seven tabs:
 5. **Historical Asymmetric Theory**
   - Directional-threshold strategy results and downloadable report.
 6. **ETF Research**
-  - XLP/QQQ USD pilot and a separate XST/XQQ CAD reference, using the original
+  - XUT/XQQ CAD pilot and an XST/XQQ CAD reference, using the original
     Nasdaq-relative raw-close +/-3% and +/-5% method, not live alert thresholds.
+    XUT (Canadian utilities) replaces the earlier XLP pilot; it is not a
+    like-for-like consumer staples fund. Both pairs retain XQQ, with no FX conversion.
   - Two-/five-year equity curves, premiums, switch logs, risk/performance
     metrics, daily-return correlations, liquidity and downloadable daily histories.
   - Uses a verified generated snapshot. Missing/inconsistent snapshots fail

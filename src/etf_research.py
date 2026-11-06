@@ -1,4 +1,4 @@
-"""Reproducible XLP/QQQ pilot using the original raw-close switching rules."""
+"""Reproducible XUT/XQQ pilot using the original raw-close switching rules."""
 
 import argparse
 import hashlib
@@ -21,15 +21,10 @@ HISTORY_COLUMNS = [
     "Dividends", "Stock Splits",
 ]
 FUNDS = {
-    "XLP": {
-        "currency": "USD", "calendar": "XNYS",
-        "source": "https://www.ssga.com/us/en/intermediary/etfs/state-street-consumer-staples-select-sector-spdr-etf-xlp",
-        "description": "US S&P 500 consumer staples; inception 1998-12-16; gross expense ratio 0.08% (issuer checked 2026-11-06).",
-    },
-    "QQQ": {
-        "currency": "USD", "calendar": "XNYS",
-        "source": "https://www.invesco.com/qqq-etf/en/about.html",
-        "description": "US Nasdaq-100, USD; not equivalent to CAD-hedged XQQ.",
+    "XUT.TO": {
+        "currency": "CAD", "calendar": "XTSE",
+        "source": "https://www.blackrock.com/ca/investors/en/literature/fact-sheet/xut-ishares-s-p-tsx-capped-utilities-index-etf-fund-fact-sheet-en-ca.pdf",
+        "description": "iShares S&P/TSX Capped Utilities Index ETF; Canadian utilities, not consumer staples; inception 2011-04-12.",
     },
     "XST.TO": {
         "currency": "CAD", "calendar": "XTSE",
@@ -42,18 +37,19 @@ FUNDS = {
         "description": "Nasdaq-100 CAD-hedged reference.",
     },
 }
-PAIRS = (("XLP", "QQQ", "USD"), ("XST.TO", "XQQ.TO", "CAD"))
+PAIRS = (("XUT.TO", "XQQ.TO", "CAD"), ("XST.TO", "XQQ.TO", "CAD"))
 SUMMARY_COLUMNS = [
     "Pair", "Currency", "Years", "Threshold", "Start", "End", "Sessions",
     "Strategy", "Final value", "Return %", "CAGR %", "Max drawdown %",
     "Annual volatility %", "Switches", "Mean completed holding days",
-    "Excess vs staples (pp)", "Excess vs Nasdaq (pp)", "Excess vs 50/50 (pp)",
+    "Excess vs defensive (pp)", "Excess vs Nasdaq (pp)", "Excess vs 50/50 (pp)",
 ]
 SWITCH_COLUMNS = ["Date", "From", "To", "Premium %", "Sale price", "Buy price", "Value"]
-CURVE_COLUMNS = ["Date", "Staples close", "Nasdaq close", "Premium %", "Holding", "Switching", "Staples only", "Nasdaq only", "50/50"]
+CURVE_COLUMNS = ["Date", "Defensive close", "Nasdaq close", "Premium %", "Holding", "Switching", "Defensive only", "Nasdaq only", "50/50"]
 METHODOLOGY = (
-    "Original method: premium = (staples Close - Nasdaq Close) / Nasdaq Close * 100; "
-    "thresholds +/-3% and +/-5%; start in staples; switch only to the opposite ETF. "
+    "Original method: premium = (defensive ETF Close - Nasdaq Close) / Nasdaq Close * 100; "
+    "thresholds +/-3% and +/-5%; start in the defensive ETF; switch only to the opposite ETF. "
+    "Defensive means XUT (utilities) in the pilot and XST (consumer staples) in the reference. "
     "Earn each day's return in the previous holding, then execute at that day's close. "
     "Initial capital 10,000 in each pair's own currency; fractional shares; "
     "unrebalanced 50/50 benchmark. No dividends, fees, slippage or taxes. "
@@ -63,10 +59,11 @@ LIMITATIONS = (
     "Raw share-price differences are not valuations. Share denominations and splits can "
     "dominate signals; Yahoo Close is not dividend-adjusted but is normally split-restated, "
     "not historical as-traded prices. No rebasing or reconstruction of as-traded prices is used. "
-    "Zero-switch results are retained. USD XLP/QQQ does not test XLP against CAD-hedged XQQ; "
-    "USD and CAD dollar results are separate. Correlations use daily returns, not price levels. "
-    "Historical performance cannot establish the best future investment. Only XLP is analyzed; "
-    "IYK, KXI, FSTA and VDC are deferred."
+    "Zero-switch results are retained. Both XUT/XQQ and XST/XQQ use CAD prices, without FX conversion. "
+    "XUT is a utilities sector fund, not a like-for-like consumer staples replacement. "
+    "Correlations use daily returns, not price levels. Historical performance cannot establish "
+    "the best future investment. XUT replaces the earlier XLP pilot; selecting a new fund after "
+    "seeing XLP's results introduces selection bias. IYK, KXI, FSTA and VDC remain deferred."
 )
 
 
@@ -78,7 +75,7 @@ def completed_cutoff(now: pd.Timestamp) -> pd.Timestamp:
     if now.tzinfo is None:
         raise ValueError("The research clock must be timezone-aware.")
     dates = []
-    for name in ("XNYS", "XTSE"):
+    for name in sorted({fund["calendar"] for fund in FUNDS.values()}):
         calendar = xcals.get_calendar(
             name, start=now.date() - pd.Timedelta(days=20),
             end=now.date() + pd.Timedelta(days=2),
@@ -166,9 +163,9 @@ def backtest(frame: pd.DataFrame, staples: str, nasdaq: str, threshold: float) -
         staples_value = 10000 * row.Close_staples / first["Close_staples"]
         nasdaq_value = 10000 * row.Close_nasdaq / first["Close_nasdaq"]
         curves.append({
-            "Date": row.Date, "Staples close": row.Close_staples, "Nasdaq close": row.Close_nasdaq,
+            "Date": row.Date, "Defensive close": row.Close_staples, "Nasdaq close": row.Close_nasdaq,
             "Premium %": premium, "Holding": holding, "Switching": value,
-            "Staples only": staples_value, "Nasdaq only": nasdaq_value,
+            "Defensive only": staples_value, "Nasdaq only": nasdaq_value,
             "50/50": (staples_value + nasdaq_value) / 2,
         })
         previous = prices
@@ -226,7 +223,7 @@ def csv_text(frame: pd.DataFrame) -> str:
 def build_outputs(histories: dict[str, pd.DataFrame], cutoff: pd.Timestamp, retrieved: pd.Timestamp) -> dict[str, str]:
     start = cutoff - pd.DateOffset(years=5)
     manifest = {
-        "schema_version": 1, "pilot": "XLP", "cutoff": str(cutoff.date()),
+        "schema_version": 2, "pilot": "XUT", "cutoff": str(cutoff.date()),
         "requested_start": str(start.date()), "retrieved_at": retrieved.isoformat(),
         "provider": f"Yahoo Finance via yfinance {yf.__version__}; auto_adjust=False, actions=True",
         "methodology": METHODOLOGY, "limitations": LIMITATIONS, "funds": {}, "samples": [],
@@ -267,8 +264,8 @@ def build_outputs(histories: dict[str, pd.DataFrame], cutoff: pd.Timestamp, retr
                 outputs[f"src/{PREFIX}{key}_switches.csv"] = csv_text(switches)
                 dates = [window["Date"].iloc[0], *switches["Date"].tolist()]
                 durations = [(right - left).days for left, right in zip(dates, dates[1:])]
-                baseline_returns = {name: (curve[name].iloc[-1] / 10000 - 1) * 100 for name in ("Staples only", "Nasdaq only", "50/50")}
-                for strategy in ("Switching", "Staples only", "Nasdaq only", "50/50"):
+                baseline_returns = {name: (curve[name].iloc[-1] / 10000 - 1) * 100 for name in ("Defensive only", "Nasdaq only", "50/50")}
+                for strategy in ("Switching", "Defensive only", "Nasdaq only", "50/50"):
                     metrics = performance(curve[strategy], curve["Date"])
                     summary.append({
                         "Pair": pair, "Currency": currency, "Years": years, "Threshold": threshold,
@@ -277,7 +274,7 @@ def build_outputs(histories: dict[str, pd.DataFrame], cutoff: pd.Timestamp, retr
                         "Switches": len(switches) if strategy == "Switching" else 0,
                         "Mean completed holding days": sum(durations) / len(durations) if durations and strategy == "Switching" else None,
                         **{f"Excess vs {label} (pp)": metrics["Return %"] - baseline_returns[name]
-                           for label, name in (("staples", "Staples only"), ("Nasdaq", "Nasdaq only"), ("50/50", "50/50"))},
+                           for label, name in (("defensive", "Defensive only"), ("Nasdaq", "Nasdaq only"), ("50/50", "50/50"))},
                     })
     summary_frame = pd.DataFrame(summary, columns=SUMMARY_COLUMNS)
     outputs[f"src/{PREFIX}summary.csv"] = csv_text(summary_frame)
@@ -291,7 +288,7 @@ def build_outputs(histories: dict[str, pd.DataFrame], cutoff: pd.Timestamp, retr
 
 def research_report(summary: pd.DataFrame, manifest: dict) -> str:
     lines = [
-        "# XLP replacement research: original-method pilot", "",
+        "# XUT replacement research: original-method pilot", "",
         f"Data cutoff: **{manifest['cutoff']}**. Retrieved: {manifest['retrieved_at']}.",
         "", "## Method", "", METHODOLOGY, "", "## Critical limitations", "", LIMITATIONS,
         "", "## Results", "",
@@ -304,21 +301,39 @@ def research_report(summary: pd.DataFrame, manifest: dict) -> str:
             f"| {row['Return %']:.2f}% | {row['CAGR %']:.2f}% | {row['Max drawdown %']:.2f}% "
             f"| {row['Switches']} | {row['Excess vs 50/50 (pp)']:+.2f} |"
         )
-    pilot = summary[(summary["Pair"] == "XLP/QQQ") & (summary["Strategy"] == "Switching")]
+    pilot = summary[(summary["Pair"] == "XUT.TO/XQQ.TO") & (summary["Strategy"] == "Switching")]
     if (pilot["Switches"] == 0).all():
         conclusion = (
-            "The original raw-price rules produce **no XLP/QQQ switches** in either window or threshold. "
-            "The strategy is simply XLP buy-and-hold: this pilot does not support XLP as a functioning "
+            "The original raw-price rules produce **no XUT/XQQ switches** in either window or threshold. "
+            "The strategy is simply XUT buy-and-hold: this pilot does not support XUT as a functioning "
             "replacement for the documented switching approach. This is a share-price-scale limitation, "
-            "not evidence that XLP is intrinsically unsuitable as a staples investment."
+            "not evidence that XUT is intrinsically unsuitable as a utilities investment."
         )
     else:
-        conclusion = (
+        findings = [
+            f"- {row['Years']}y at +/-{row['Threshold']}%: **{row['Switches']} switches**, "
+            f"return **{row['Return %']:+.2f}%**, "
+            f"excess vs 50/50 **{row['Excess vs 50/50 (pp)']:+.2f} pp**."
+            for row in pilot.to_dict("records")
+        ]
+        conclusion = "\n".join(findings) + "\n\n" + (
             "Assess both thresholds and windows together, including drawdown and excess returns. "
             "Any observed advantage is specific to these raw price levels and same-close assumptions; "
             "it does not establish a robust or directly executable XST replacement."
         )
-    lines += ["", "## Assessment", "", conclusion, "", "No other candidate was analyzed. Expansion requires a separate decision.",
+        inactive = pilot[pilot["Switches"] == 0]
+        if not inactive.empty:
+            conclusion += (
+                " Some scenarios have no switches and simply hold XUT; "
+                "earlier switches do not establish ongoing switching activity."
+            )
+        reference = summary[(summary["Pair"] == "XST.TO/XQQ.TO") & (summary["Strategy"] == "Switching")]
+        comparison = pilot.merge(reference, on=["Years", "Threshold"], suffixes=("_pilot", "_reference"))
+        if (comparison["Return %_pilot"] < comparison["Return %_reference"]).all():
+            conclusion += " XUT switching underperforms the XST/XQQ switching reference in every tested scenario."
+    lines += ["", "## Assessment", "", conclusion, "",
+              "XUT replaces the earlier XLP pilot. Both pairs now use CAD and retain XQQ; "
+              "live holdings and alerts are unchanged. Other candidates remain deferred.",
               "", "## Data coverage, liquidity and return correlations", ""]
     for ticker, fund in manifest["funds"].items():
         lines += [
@@ -328,7 +343,7 @@ def research_report(summary: pd.DataFrame, manifest: dict) -> str:
             f"{fund['mean_dollar_volume_30']:,.0f} {fund['currency']} traded; "
             f"90-day averages {fund['mean_share_volume_90']:,.0f} shares / "
             f"{fund['mean_dollar_volume_90']:,.0f} {fund['currency']}. "
-            f"Split events: {json.dumps(fund['split_events'])}.",
+            f"Provider-reported split events: {json.dumps(fund['split_events'])}.",
             f"  {fund['description']} [Issuer]({fund['source']}).",
         ]
     for sample in manifest["samples"]:
@@ -341,7 +356,7 @@ def research_report(summary: pd.DataFrame, manifest: dict) -> str:
     lines += [
         "", "## Reproducibility", "",
         f"Provider: {manifest['provider']}. Each pair uses common observed sessions, without forward filling. "
-        "CAD and USD cohorts are separate; there is no cross-candidate ranking in this single-candidate pilot.",
+        "Both pairs use CAD with the same XQQ series and cutoff; no FX conversion is applied.",
         "CSV files preserve provider precision; Adj Close and actions are exported for audit but do not drive returns.",
         "Manifest: [coverage and SHA-256 hashes](../src/etf_research_manifest.json). "
         "Daily data source: Yahoo Finance, accessed through yfinance. "
@@ -385,7 +400,7 @@ def main() -> None:
         histories[ticker] = download_history(ticker, start, cutoff)
     outputs = build_outputs(histories, cutoff, now)
     publish_outputs(outputs, ROOT)
-    print(f"Published {len(outputs)} validated XLP pilot artifacts.")
+    print(f"Published {len(outputs)} validated XUT pilot artifacts.")
 
 
 if __name__ == "__main__":

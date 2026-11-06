@@ -53,11 +53,12 @@ workflows enabled. Configure the email secrets in GitHub, not on a computer.
 See [monitor documentation](docs/monitor.md) for secret names, position fields,
 schedule limitations, and troubleshooting. No new Streamlit secrets are required.
 
-## XLP research pilot
+## XUT research pilot
 
-The **ETF Research** tab provides a separate XLP/QQQ USD pilot and an XST/XQQ
-CAD reference. It follows the original raw-close +/-3% and +/-5% switching
-method, not the live asymmetric alerts. Four daily histories, coverage/source
+The **ETF Research** tab provides an XUT/XQQ CAD pilot and an XST/XQQ
+CAD reference. XUT is Canadian utilities, not consumer staples, and replaces
+the earlier XLP pilot. It follows the original raw-close +/-3% and +/-5% switching
+method, not the live asymmetric alerts. Three daily histories, coverage/source
 metadata, curves, switch logs and a [research report](docs/etf_replacement_research.md)
 are generated with `python -m src.etf_research` and refreshed by the existing
 historical-data workflow. Results use hypothetical 10,000 starting capital,

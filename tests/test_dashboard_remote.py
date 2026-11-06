@@ -254,21 +254,26 @@ class TestRemoteDashboard(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertIn("missing columns", app.error[0].value)
 
-    def test_xlp_research_tab_shows_separate_cohorts_and_both_selectors(self):
+    def test_xut_research_tab_shows_both_cad_pairs_and_selectors(self):
         app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
         self.assertFalse(app.exception)
         tab = next(tab for tab in app.tabs if tab.label == "ETF Research")
         self.assertFalse(tab.error)
         markup = "\n".join(item.value for item in tab.markdown)
-        self.assertIn("research-usd-summary", markup)
-        self.assertIn("research-cad-summary", markup)
-        self.assertIn("no XLP/QQQ switches", markup)
+        self.assertIn("research-pilot-summary", markup)
+        self.assertIn("research-reference-summary", markup)
+        self.assertIn("XUT.TO/XQQ.TO", markup)
+        self.assertIn("XUT only", markup)
+        self.assertIn("XST only", markup)
+        self.assertNotIn("USD", markup)
+        self.assertNotIn("Staples only", markup)
         self.assertTrue(any("different share denominations" in item.value.lower() for item in tab.warning))
         app.selectbox(key="research_years").select(2)
         app.selectbox(key="research_threshold").select(5)
         app.run(timeout=30)
         self.assertFalse(app.exception)
         self.assertFalse(next(tab for tab in app.tabs if tab.label == "ETF Research").error)
+        self.assertEqual(len(app.get("plotly_chart")), len({chart.proto.id for chart in app.get("plotly_chart")}))
 
     def test_missing_research_snapshot_does_not_break_other_tabs(self):
         with patch("src.research_dashboard.load_snapshot", side_effect=ValueError("Research snapshot missing")):

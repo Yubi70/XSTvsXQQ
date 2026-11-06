@@ -1,4 +1,4 @@
-"""Read-only presentation of the generated XLP research snapshot."""
+"""Read-only presentation of the generated XUT research snapshot."""
 
 import hashlib
 import json
@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_snapshot(root: Path = ROOT) -> tuple[dict, dict[str, str], pd.DataFrame]:
     try:
         manifest = json.loads((root / "src/etf_research_manifest.json").read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict) or manifest.get("schema_version") != 1 or manifest.get("pilot") != "XLP":
-            raise ValueError("Unrecognized XLP research manifest.")
+        if not isinstance(manifest, dict) or manifest.get("schema_version") != 2 or manifest.get("pilot") != "XUT":
+            raise ValueError("Unrecognized XUT research manifest; regenerate the current pilot.")
         expected = {
             "src/etf_research_summary.csv", "docs/etf_replacement_research.md",
             *(f"src/{history_name(ticker)}" for ticker in FUNDS),
@@ -48,7 +48,7 @@ def load_snapshot(root: Path = ROOT) -> tuple[dict, dict[str, str], pd.DataFrame
             (f"{staples}/{nasdaq}", currency, years, threshold, strategy)
             for staples, nasdaq, currency in PAIRS
             for years in (5, 2) for threshold in (3, 5)
-            for strategy in ("Switching", "Staples only", "Nasdaq only", "50/50")
+            for strategy in ("Switching", "Defensive only", "Nasdaq only", "50/50")
         }
         if set(summary[["Pair", "Currency", "Years", "Threshold", "Strategy"]].itertuples(index=False, name=None)) != expected_rows:
             raise ValueError("Invalid or duplicate research summary scenarios.")
@@ -103,7 +103,7 @@ def load_snapshot(root: Path = ROOT) -> tuple[dict, dict[str, str], pd.DataFrame
             raise ValueError("Missing research report sections.")
         return manifest, texts, summary
     except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, pd.errors.ParserError) as error:
-        raise ValueError(f"Cannot load the XLP research snapshot: {error}") from error
+        raise ValueError(f"Cannot load the XUT research snapshot: {error}") from error
 
 
 def compact_table(frame: pd.DataFrame, identifier: str) -> None:
@@ -118,7 +118,7 @@ def compact_table(frame: pd.DataFrame, identifier: str) -> None:
 
 
 def render_research_tab() -> None:
-    st.subheader("ETF Replacement Research: XLP Pilot")
+    st.subheader("ETF Replacement Research: XUT Pilot")
     try:
         manifest, texts, summary = load_snapshot()
     except ValueError as error:
@@ -139,7 +139,7 @@ def render_research_tab() -> None:
     st.warning(
         "Raw ETF share prices are arbitrary, not valuations. Different share denominations and split conventions "
         "can prevent all switches. Same-close signals/execution are optimistic. "
-        "USD XLP/QQQ is not a direct test of replacing XST while retaining CAD-hedged XQQ."
+        "XUT is utilities, not consumer staples. Both pairs retain XQQ and use CAD."
     )
     with st.expander("Methodology and data limitations"):
         st.write(manifest["methodology"])
@@ -149,7 +149,8 @@ def render_research_tab() -> None:
     threshold = st.selectbox("Original switching threshold", [3, 5], format_func=lambda value: f"+/-{value}%", key="research_threshold")
     for staples, nasdaq, currency in PAIRS:
         pair = f"{staples}/{nasdaq}"
-        st.markdown(f"#### {pair} — {currency} {'pilot' if currency == 'USD' else 'reference (separate currency)'}")
+        role = "pilot" if staples == "XUT.TO" else "reference"
+        st.markdown(f"#### {pair} — {currency} {role}")
         sample = next(item for item in manifest["samples"] if item["pair"] == pair and item["years"] == years)
         st.caption(
             f"{sample['start']} to {sample['end']}: {sample['sessions']} common daily sessions. "
@@ -163,12 +164,13 @@ def render_research_tab() -> None:
         rows = []
         for row in selected.to_dict("records"):
             rows.append({
-                "Strategy": row["Strategy"], "Value": f"{row['Final value']:,.2f}",
+                "Strategy": row["Strategy"].replace("Defensive only", f"{staples.removesuffix('.TO')} only"),
+                "Value": f"{row['Final value']:,.2f}",
                 "Return": f"{row['Return %']:+.2f}%", "CAGR": f"{row['CAGR %']:+.2f}%",
                 "Drawdown": f"{row['Max drawdown %']:.2f}%", "Volatility": f"{row['Annual volatility %']:.2f}%",
                 "Switches": row["Switches"], "vs 50/50": f"{row['Excess vs 50/50 (pp)']:+.2f} pp",
             })
-        compact_table(pd.DataFrame(rows), f"research-{currency.lower()}-summary")
+        compact_table(pd.DataFrame(rows), f"research-{role}-summary")
         st.caption(f"All values in this section are {currency}, starting at 10,000. Negative drawdown = peak-to-trough loss.")
         key = f"{staples.replace('.', '_')}_{nasdaq.replace('.', '_')}_{years}y_{threshold}pct"
         curve_text = texts[f"src/etf_research_{key}_curve.csv"]
@@ -179,26 +181,27 @@ def render_research_tab() -> None:
             st.error(f"Invalid research curve or switch-log schema for {pair}.")
             return
         fig = go.Figure()
-        for name in ("Switching", "Staples only", "Nasdaq only", "50/50"):
-            fig.add_trace(go.Scatter(x=curve["Date"], y=curve[name], name=name, mode="lines"))
+        for name in ("Switching", "Defensive only", "Nasdaq only", "50/50"):
+            label = name.replace("Defensive only", f"{staples.removesuffix('.TO')} only")
+            fig.add_trace(go.Scatter(x=curve["Date"], y=curve[name], name=label, mode="lines"))
         fig.update_layout(height=340, margin=dict(l=0, r=0, t=35, b=0),
                           yaxis_title=f"Value ({currency})", legend=dict(orientation="h"))
-        st.plotly_chart(fig, use_container_width=True, key=f"research_equity_{currency}")
+        st.plotly_chart(fig, use_container_width=True, key=f"research_equity_{role}")
         premium = go.Figure(go.Scatter(
             x=curve["Date"], y=curve["Premium %"], name="Raw-price premium", mode="lines",
         ))
         for level in (threshold, -threshold):
             premium.add_hline(y=level, line_dash="dash", annotation_text=f"{level:+}%")
         premium.update_layout(height=270, margin=dict(l=0, r=0, t=15, b=0),
-                              yaxis_title="(Staples - Nasdaq) / Nasdaq %")
-        st.plotly_chart(premium, use_container_width=True, key=f"research_premium_{currency}")
+                              yaxis_title=f"({staples.removesuffix('.TO')} - XQQ) / XQQ %")
+        st.plotly_chart(premium, use_container_width=True, key=f"research_premium_{role}")
         with st.expander(f"{pair} switch log and downloads"):
             if switches.empty:
-                st.info("No switches under these raw-price rules. Switching equals staples buy-and-hold.")
+                st.info(f"No switches under these raw-price rules. Switching equals {staples} buy-and-hold.")
             else:
                 st.dataframe(switches, hide_index=True, use_container_width=True)
-            st.download_button("Download daily equity/premium curve", curve_text, f"{key}_curve.csv", "text/csv", key=f"curve_{currency}")
-            st.download_button("Download switch log", switch_text, f"{key}_switches.csv", "text/csv", key=f"switches_{currency}")
+            st.download_button("Download daily equity/premium curve", curve_text, f"{key}_curve.csv", "text/csv", key=f"curve_{role}")
+            st.download_button("Download switch log", switch_text, f"{key}_switches.csv", "text/csv", key=f"switches_{role}")
     st.markdown("#### Pilot assessment")
     st.markdown(texts["docs/etf_replacement_research.md"].split("## Assessment\n", 1)[1].split("## Data coverage", 1)[0])
     with st.expander("Daily histories, liquidity, coverage and sources"):
