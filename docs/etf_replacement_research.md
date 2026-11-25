@@ -1,6 +1,6 @@
 # XUT replacement research: original-method pilot
 
-Data cutoff: **2026-11-24**. Retrieved: 2026-11-24T22:06:25.187228+00:00.
+Data cutoff: **2026-11-25**. Retrieved: 2026-11-25T22:06:48.449310+00:00.
 
 ## Method
 
@@ -14,45 +14,45 @@ Raw share-price differences are not valuations. Share denominations and splits c
 
 | Pair / currency | Years | Threshold | Strategy | Return | CAGR | Max drawdown | Switches | Excess vs 50/50 (pp) |
 |---|---:|---:|---|---:|---:|---:|---:|---:|
-| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Switching | 58.17% | 9.61% | -28.72% | 6 | +20.20 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Defensive only | 27.44% | 4.97% | -32.21% | 0 | -10.53 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Nasdaq only | 48.51% | 8.23% | -36.08% | 0 | +10.53 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 3% | 50/50 | 37.98% | 6.65% | -24.71% | 0 | +0.00 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Switching | 63.25% | 10.30% | -22.83% | 4 | +25.27 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Defensive only | 27.44% | 4.97% | -32.21% | 0 | -10.53 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Nasdaq only | 48.51% | 8.23% | -36.08% | 0 | +10.53 |
-| XUT.TO/XQQ.TO (CAD) | 5 | 5% | 50/50 | 37.98% | 6.65% | -24.71% | 0 | +0.00 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Switching | 32.91% | 15.32% | -12.73% | 0 | +5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Defensive only | 32.91% | 15.32% | -12.73% | 0 | +5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Nasdaq only | 21.16% | 10.09% | -22.81% | 0 | -5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 3% | 50/50 | 27.04% | 12.74% | -13.94% | 0 | +0.00 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Switching | 32.91% | 15.32% | -12.73% | 0 | +5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Defensive only | 32.91% | 15.32% | -12.73% | 0 | +5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Nasdaq only | 21.16% | 10.09% | -22.81% | 0 | -5.88 |
-| XUT.TO/XQQ.TO (CAD) | 2 | 5% | 50/50 | 27.04% | 12.74% | -13.94% | 0 | +0.00 |
-| XST.TO/XQQ.TO (CAD) | 5 | 3% | Switching | 187.98% | 23.56% | -30.65% | 13 | +117.39 |
-| XST.TO/XQQ.TO (CAD) | 5 | 3% | Defensive only | 92.66% | 14.02% | -10.72% | 0 | +22.07 |
-| XST.TO/XQQ.TO (CAD) | 5 | 3% | Nasdaq only | 48.51% | 8.23% | -36.08% | 0 | -22.07 |
-| XST.TO/XQQ.TO (CAD) | 5 | 3% | 50/50 | 70.59% | 11.27% | -18.28% | 0 | +0.00 |
-| XST.TO/XQQ.TO (CAD) | 5 | 5% | Switching | 202.32% | 24.77% | -30.65% | 9 | +131.73 |
-| XST.TO/XQQ.TO (CAD) | 5 | 5% | Defensive only | 92.66% | 14.02% | -10.72% | 0 | +22.07 |
-| XST.TO/XQQ.TO (CAD) | 5 | 5% | Nasdaq only | 48.51% | 8.23% | -36.08% | 0 | -22.07 |
-| XST.TO/XQQ.TO (CAD) | 5 | 5% | 50/50 | 70.59% | 11.27% | -18.28% | 0 | +0.00 |
-| XST.TO/XQQ.TO (CAD) | 2 | 3% | Switching | 87.50% | 37.02% | -18.04% | 11 | +60.02 |
-| XST.TO/XQQ.TO (CAD) | 2 | 3% | Defensive only | 33.80% | 15.71% | -10.72% | 0 | +6.32 |
-| XST.TO/XQQ.TO (CAD) | 2 | 3% | Nasdaq only | 21.16% | 10.09% | -22.81% | 0 | -6.32 |
-| XST.TO/XQQ.TO (CAD) | 2 | 3% | 50/50 | 27.48% | 12.94% | -13.21% | 0 | +0.00 |
-| XST.TO/XQQ.TO (CAD) | 2 | 5% | Switching | 62.58% | 27.57% | -16.99% | 5 | +35.10 |
-| XST.TO/XQQ.TO (CAD) | 2 | 5% | Defensive only | 33.80% | 15.71% | -10.72% | 0 | +6.32 |
-| XST.TO/XQQ.TO (CAD) | 2 | 5% | Nasdaq only | 21.16% | 10.09% | -22.81% | 0 | -6.32 |
-| XST.TO/XQQ.TO (CAD) | 2 | 5% | 50/50 | 27.48% | 12.94% | -13.21% | 0 | +0.00 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Switching | 57.05% | 9.45% | -28.72% | 6 | +20.46 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Defensive only | 26.54% | 4.82% | -32.21% | 0 | -10.05 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 3% | Nasdaq only | 46.65% | 7.96% | -36.08% | 0 | +10.05 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 3% | 50/50 | 36.59% | 6.44% | -24.67% | 0 | +0.00 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Switching | 62.09% | 10.14% | -22.83% | 4 | +25.50 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Defensive only | 26.54% | 4.82% | -32.21% | 0 | -10.05 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 5% | Nasdaq only | 46.65% | 7.96% | -36.08% | 0 | +10.05 |
+| XUT.TO/XQQ.TO (CAD) | 5 | 5% | 50/50 | 36.59% | 6.44% | -24.67% | 0 | +0.00 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Switching | 31.97% | 14.89% | -12.73% | 0 | +5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Defensive only | 31.97% | 14.89% | -12.73% | 0 | +5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 3% | Nasdaq only | 20.43% | 9.75% | -22.81% | 0 | -5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 3% | 50/50 | 26.20% | 12.35% | -13.94% | 0 | +0.00 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Switching | 31.97% | 14.89% | -12.73% | 0 | +5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Defensive only | 31.97% | 14.89% | -12.73% | 0 | +5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 5% | Nasdaq only | 20.43% | 9.75% | -22.81% | 0 | -5.77 |
+| XUT.TO/XQQ.TO (CAD) | 2 | 5% | 50/50 | 26.20% | 12.35% | -13.94% | 0 | +0.00 |
+| XST.TO/XQQ.TO (CAD) | 5 | 3% | Switching | 184.63% | 23.27% | -30.65% | 13 | +115.76 |
+| XST.TO/XQQ.TO (CAD) | 5 | 3% | Defensive only | 91.09% | 13.83% | -10.72% | 0 | +22.22 |
+| XST.TO/XQQ.TO (CAD) | 5 | 3% | Nasdaq only | 46.65% | 7.96% | -36.08% | 0 | -22.22 |
+| XST.TO/XQQ.TO (CAD) | 5 | 3% | 50/50 | 68.87% | 11.05% | -18.27% | 0 | +0.00 |
+| XST.TO/XQQ.TO (CAD) | 5 | 5% | Switching | 198.81% | 24.48% | -30.65% | 9 | +129.94 |
+| XST.TO/XQQ.TO (CAD) | 5 | 5% | Defensive only | 91.09% | 13.83% | -10.72% | 0 | +22.22 |
+| XST.TO/XQQ.TO (CAD) | 5 | 5% | Nasdaq only | 46.65% | 7.96% | -36.08% | 0 | -22.22 |
+| XST.TO/XQQ.TO (CAD) | 5 | 5% | 50/50 | 68.87% | 11.05% | -18.27% | 0 | +0.00 |
+| XST.TO/XQQ.TO (CAD) | 2 | 3% | Switching | 86.37% | 36.55% | -18.04% | 11 | +59.43 |
+| XST.TO/XQQ.TO (CAD) | 2 | 3% | Defensive only | 33.47% | 15.54% | -10.72% | 0 | +6.52 |
+| XST.TO/XQQ.TO (CAD) | 2 | 3% | Nasdaq only | 20.43% | 9.75% | -22.81% | 0 | -6.52 |
+| XST.TO/XQQ.TO (CAD) | 2 | 3% | 50/50 | 26.95% | 12.68% | -13.21% | 0 | +0.00 |
+| XST.TO/XQQ.TO (CAD) | 2 | 5% | Switching | 61.60% | 27.14% | -16.99% | 5 | +34.65 |
+| XST.TO/XQQ.TO (CAD) | 2 | 5% | Defensive only | 33.47% | 15.54% | -10.72% | 0 | +6.52 |
+| XST.TO/XQQ.TO (CAD) | 2 | 5% | Nasdaq only | 20.43% | 9.75% | -22.81% | 0 | -6.52 |
+| XST.TO/XQQ.TO (CAD) | 2 | 5% | 50/50 | 26.95% | 12.68% | -13.21% | 0 | +0.00 |
 
 ## Assessment
 
-- 5y at +/-3%: **6 switches**, return **+58.17%**, excess vs 50/50 **+20.20 pp**.
-- 5y at +/-5%: **4 switches**, return **+63.25%**, excess vs 50/50 **+25.27 pp**.
-- 2y at +/-3%: **0 switches**, return **+32.91%**, excess vs 50/50 **+5.88 pp**.
-- 2y at +/-5%: **0 switches**, return **+32.91%**, excess vs 50/50 **+5.88 pp**.
+- 5y at +/-3%: **6 switches**, return **+57.05%**, excess vs 50/50 **+20.46 pp**.
+- 5y at +/-5%: **4 switches**, return **+62.09%**, excess vs 50/50 **+25.50 pp**.
+- 2y at +/-3%: **0 switches**, return **+31.97%**, excess vs 50/50 **+5.77 pp**.
+- 2y at +/-5%: **0 switches**, return **+31.97%**, excess vs 50/50 **+5.77 pp**.
 
 Assess both thresholds and windows together, including drawdown and excess returns. Any observed advantage is specific to these raw price levels and same-close assumptions; it does not establish a robust or directly executable XST replacement. Some scenarios have no switches and simply hold XUT; earlier switches do not establish ongoing switching activity. XUT switching underperforms the XST/XQQ switching reference in every tested scenario.
 
@@ -60,16 +60,16 @@ XUT replaces the earlier XLP pilot. Both pairs now use CAD and retain XQQ; live 
 
 ## Data coverage, liquidity and return correlations
 
-- **XUT.TO (CAD)**: 2021-11-24 to 2026-11-24; 1255 sessions; 0 missing; 30-day average volume 591,424 shares / 21,437,594 CAD traded; 90-day averages 494,704 shares / 17,563,832 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.983}].
+- **XUT.TO (CAD)**: 2021-11-25 to 2026-11-25; 1255 sessions; 0 missing; 30-day average volume 628,339 shares / 22,870,348 CAD traded; 90-day averages 507,245 shares / 18,039,642 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.983}].
   iShares S&P/TSX Capped Utilities Index ETF; Canadian utilities, not consumer staples; inception 2011-04-12. [Issuer](https://www.blackrock.com/ca/investors/en/literature/fact-sheet/xut-ishares-s-p-tsx-capped-utilities-index-etf-fund-fact-sheet-en-ca.pdf).
-- **XST.TO (CAD)**: 2021-11-24 to 2026-11-24; 1255 sessions; 0 missing; 30-day average volume 49,945 shares / 3,450,562 CAD traded; 90-day averages 30,227 shares / 2,033,176 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.988}, {"date": "2024-08-09", "ratio": 2.0}, {"date": "2024-12-30", "ratio": 0.967}].
+- **XST.TO (CAD)**: 2021-11-25 to 2026-11-25; 1255 sessions; 0 missing; 30-day average volume 53,764 shares / 3,726,218 CAD traded; 90-day averages 31,525 shares / 2,125,947 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.988}, {"date": "2024-08-09", "ratio": 2.0}, {"date": "2024-12-30", "ratio": 0.967}].
   Canadian consumer staples reference. [Issuer](https://www.blackrock.com/ca/investors/en/products/239840/ishares-sptsx-capped-consumer-staples-index-etf).
-- **XQQ.TO (CAD)**: 2021-11-24 to 2026-11-24; 1255 sessions; 0 missing; 30-day average volume 366,854 shares / 24,422,916 CAD traded; 90-day averages 281,356 shares / 19,767,871 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.965}, {"date": "2024-08-09", "ratio": 3.0}].
+- **XQQ.TO (CAD)**: 2021-11-25 to 2026-11-25; 1255 sessions; 0 missing; 30-day average volume 391,647 shares / 25,903,703 CAD traded; 90-day averages 288,652 shares / 20,202,848 CAD. Provider-reported split events: [{"date": "2021-12-30", "ratio": 0.965}, {"date": "2024-08-09", "ratio": 3.0}].
   Nasdaq-100 CAD-hedged reference. [Issuer](https://www.blackrock.com/ca/investors/en/products/239698/ishares-nasdaq-100-index-etf-cadhedged-fund).
-- XUT.TO/XQQ.TO, 5y: 2021-11-24 to 2026-11-24, 1255 paired sessions; return correlation 0.2437; last-year correlation -0.0824 (252 returns).
-- XUT.TO/XQQ.TO, 2y: 2024-11-25 to 2026-11-24, 502 paired sessions; return correlation 0.1482; last-year correlation -0.0824 (252 returns).
-- XST.TO/XQQ.TO, 5y: 2021-11-24 to 2026-11-24, 1255 paired sessions; return correlation 0.1866; last-year correlation -0.1830 (252 returns).
-- XST.TO/XQQ.TO, 2y: 2024-11-25 to 2026-11-24, 502 paired sessions; return correlation -0.0420; last-year correlation -0.1830 (252 returns).
+- XUT.TO/XQQ.TO, 5y: 2021-11-25 to 2026-11-25, 1255 paired sessions; return correlation 0.2439; last-year correlation -0.0817 (252 returns).
+- XUT.TO/XQQ.TO, 2y: 2024-11-25 to 2026-11-25, 503 paired sessions; return correlation 0.1490; last-year correlation -0.0817 (252 returns).
+- XST.TO/XQQ.TO, 5y: 2021-11-25 to 2026-11-25, 1255 paired sessions; return correlation 0.1865; last-year correlation -0.1732 (252 returns).
+- XST.TO/XQQ.TO, 2y: 2024-11-25 to 2026-11-25, 503 paired sessions; return correlation -0.0418; last-year correlation -0.1732 (252 returns).
 
 ## Reproducibility
 
